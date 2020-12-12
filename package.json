@@ -1,17 +1,27 @@
 {
-  "name": " ",
-  "version": "0.0.1",
-  "description": "",
-  "keywords": "",
-  "license": "",
-  "author": "",
+  "name": "robot-wants-battery",
+  "version": "1.0.0",
+  "description": "A small paper-based game.",
+  "keywords": [
+    "game"
+  ],
+  "license": "Apache-2.0",
+  "author": "Yi Su Yang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yisyang/robot-wants-battery"
+  },
   "scripts": {
+    "lint": "npx eslint js/*.js --fix",
     "build": "parcel build index.html",
     "dev": "parcel index.html --open",
     "start": "npm run build && npm run dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
+    "eslint": "^7.15.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.22.1",
     "parcel-bundler": "^1.12.4"
   }
 }
