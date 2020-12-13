@@ -1,7 +1,9 @@
+/* eslint-disable no-cond-assign */
+
 // Avoid `console` errors in browsers that lack a console.
-(function () {
+(() => {
   let method;
-  const noop = function () {};
+  const noop = () => {};
   const methods = [
     'assert', 'clear', 'count', 'debug', 'dir', 'dirxml', 'error',
     'exception', 'group', 'groupCollapsed', 'groupEnd', 'info', 'log',
@@ -9,16 +11,16 @@
     'timeline', 'timelineEnd', 'timeStamp', 'trace', 'warn',
   ];
   let { length } = methods;
-  const console = (window.console = window.console || {});
+  window.console = window.console || {};
 
-  while (length--) {
+  while (length -= 1) {
     method = methods[length];
 
     // Only stub undefined methods.
-    if (!console[method]) {
-      console[method] = noop;
+    if (!window.console[method]) {
+      window.console[method] = noop;
     }
   }
-}());
+})();
 
 // Place any jQuery/helper plugins in here.
