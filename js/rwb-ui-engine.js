@@ -150,12 +150,13 @@ export default class RwbUiEngine {
     const boardAR = this.displayOptions.gridCountX / this.displayOptions.gridCountY / 1.1;
     this.displayOptions.boardWidth = this.displayOptions.gridSizePx * this.displayOptions.gridCountX;
     this.displayOptions.boardHeight = this.displayOptions.gridSizePx * this.displayOptions.gridCountY;
+
+    this.displayOptions.boardMarginTop = Math.floor(
+      (1 + 0.1 * this.displayOptions.gridCountY) * this.displayOptions.gridSizePx,
+    );
     if (containerAR > boardAR) {
       this.displayOptions.displayMode = 'landscape';
       this.displayOptions.boardMarginLeft = this.displayOptions.gridSizePx;
-      this.displayOptions.boardMarginTop = Math.floor(
-        (1 + 0.1 * this.displayOptions.gridCountY) * this.displayOptions.gridSizePx,
-      );
       this.displayOptions.boardWidthWithMargin = this.displayOptions.boardWidth
         + 2 * this.displayOptions.boardMarginLeft;
       this.displayOptions.boardHeightWithMargin = this.displayOptions.height;
@@ -163,9 +164,6 @@ export default class RwbUiEngine {
       this.displayOptions.displayMode = 'portrait';
       this.displayOptions.boardMarginLeft = Math.floor(
         (this.displayOptions.width - this.displayOptions.boardWidth) / 2,
-      );
-      this.displayOptions.boardMarginTop = Math.floor(
-        (1 + 0.1 * this.displayOptions.gridCountY) * this.displayOptions.gridSizePx,
       );
       this.displayOptions.boardWidthWithMargin = this.displayOptions.width;
       this.displayOptions.boardHeightWithMargin = this.displayOptions.boardHeight

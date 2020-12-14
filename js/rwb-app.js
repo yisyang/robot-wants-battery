@@ -34,13 +34,6 @@ export default class RwbApp {
       y: this.gameOptions.gridCountY - 4,
     };
 
-    // To support window resize, definitely over-engineering it.
-    this.displayOptions = {};
-
-    // Persisted state across sessions.
-    this.persistedState = {};
-    this.loadPersistedState();
-
     // Game state contains ALL state info for the game in progress,
     // and can be used to re-render the game board.
     this.gameState = new RwbState({
@@ -86,7 +79,7 @@ export default class RwbApp {
     const randomSeeder = new RandomSeeder(seedPhrase);
 
     this.uiEngine.updateUiMessage('mapInfo', { text: `Map Seed: ${seedPhrase}` });
-    this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.persistedState.highScore}` });
+    this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
 
     // Compute water tiles.
     this.gameState.set('mapTiles', []);
@@ -113,13 +106,8 @@ export default class RwbApp {
     this.uiEngine.createPlayerPieces(this.gameState.get('playersCount'));
   }
 
-  loadPersistedState() {
-    this.persistedState.mapDifficulty = window.localStorage.getItem('difficulty') || 1;
-    this.persistedState.highScore = window.localStorage.getItem('highScore') || 0;
-  }
-
   newGame() {
-    this.savePersistedState();
+    this.gameState.savePersistedState();
     this.generateBoard();
     this.uiEngine.handleWindowResize();
     this.nextTurn();
@@ -165,10 +153,5 @@ export default class RwbApp {
   reset() {
     this.uiEngine.clearStage();
     this.uiEngine.clearUiMessages();
-  }
-
-  savePersistedState() {
-    window.localStorage.setItem('difficulty', this.persistedState.mapDifficulty);
-    window.localStorage.setItem('highScore', this.persistedState.highScore);
   }
 }
