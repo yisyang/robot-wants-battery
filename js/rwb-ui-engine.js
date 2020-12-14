@@ -112,16 +112,13 @@ export default class RwbUiEngine {
   }
 
   clearStage() {
-    // Clear player pieces.
-    for (let i = this.ui.containers.sprites.length - 1; i >= 0; i--) {
-      this.ui.containers.sprites.removeChild(this.ui.containers.sprites[i]);
+    // Clear map and sprites containers.
+    for (const container of ['map', 'sprites']) {
+      for (let i = this.ui.containers[container].length - 1; i >= 0; i--) {
+        this.ui.containers[container].removeChild(this.ui.containers[container][i]);
+      }
     }
     this.ui.objects.players = [];
-
-    // Clear map tiles.
-    for (let i = this.ui.containers.map.length - 1; i >= 0; i--) {
-      this.ui.containers.map.removeChild(this.ui.containers.map[i]);
-    }
     this.ui.objects.tiles = [];
   }
 
@@ -348,8 +345,8 @@ export default class RwbUiEngine {
       } else {
         piece.width = this.displayOptions.gridSizePx;
         piece.height = this.displayOptions.gridSizePx;
-        piece.x = offsetX
-        piece.y = offsetY
+        piece.x = offsetX;
+        piece.y = offsetY;
       }
     }
   }
