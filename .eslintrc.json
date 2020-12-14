@@ -12,6 +12,7 @@
     },
     "rules": {
       "import/extensions": ["off"],
+      "no-console": ["off"],
       "no-mixed-operators": ["off"],
       "no-plusplus": [
         "warn",
@@ -19,7 +20,7 @@
           "allowForLoopAfterthoughts": true
         }
       ],
-      "no-underscore-dangle": ["off"],
+      "no-restricted-syntax": ["error", "WithStatement", "BinaryExpression[operator='in']"],
       "max-len": [
         "warn",
         {

@@ -1,8 +1,7 @@
-import RwbGameEngine from './rwb-engine.js';
+import RwbApp from './rwb-app.js';
 
 window.onload = () => {
-  const rwb = new RwbGameEngine({
-    holderDivId: 'game-holder',
+  const rwb = new RwbApp('game-holder', {
     gridCountX: 16,
     gridCountY: 16,
   });
