@@ -14,6 +14,8 @@ export default class RwbApp {
       gridCountY: null,
       playerLocations: [],
       maxScore: 100,
+      controllersAllowed: [0, 1, 2, 3],
+      controllerLabels: ['None', 'Human', 'AI (Easy)', 'AI (Hard)'],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
       waterTileChances: [0.05, 0.15, 0.25, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
@@ -37,6 +39,7 @@ export default class RwbApp {
     // Game state contains ALL state info for the game in progress,
     // and can be used to re-render the game board.
     this.gameState = new RwbState({
+      gameOptions: this.gameOptions,
       currentScore: this.gameOptions.maxScore, // -8/-4/-2/-1 per turn on easy/normal/difficult/impossible
     });
 
@@ -54,7 +57,8 @@ export default class RwbApp {
   init() {
     this.uiEngine.init().then(() => {
       // Trigger it manually for initial rendering.
-      this.newGame();
+      this.uiEngine.handleWindowResize();
+      console.log('UI engine initialized complete.');
     }).catch((e) => {
       console.log('Failed to initialize UI.');
       console.error(e);
@@ -132,21 +136,13 @@ export default class RwbApp {
     this.uiEngine.updateUiMessage('gameTurn', { text: `(${difficultyLabel}) Turn: ${currentTurn}` });
     this.uiEngine.updateUiMessage('gameScore', { text: `Score: ${this.gameState.get('currentScore')}` });
 
-    // const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
-    // this.uiEngine.updateUiMessage('playerTurn', {
-    //   text: `${playerName}'s turn.`,
-    //   fill: this.gameOptions.playerColors[currentActivePlayer],
-    //   fontSize: 1.2 * this.uiEngine.displayOptions.gridSizePx,
-    // });
-
-    // TODO: Remove once game is playable.
+    const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
     this.uiEngine.updateUiMessage('playerTurn', {
-      text: '\nUNDER CONSTRUCTION\nNot yet playable',
-      align: 'center',
-      fill: 0xff0000,
+      text: `${playerName}'s turn.`,
+      fill: this.gameOptions.playerColors[currentActivePlayer],
       fontSize: 1.2 * this.uiEngine.displayOptions.gridSizePx,
-      x: this.uiEngine.displayOptions.boardWidthWithMargin / 2,
-      y: this.uiEngine.displayOptions.boardHeightWithMargin / 2,
+      x: this.uiEngine.displayOptions.board.widthWithMargin / 2,
+      y: this.uiEngine.displayOptions.board.heightWithMargin / 2,
     });
   }
 

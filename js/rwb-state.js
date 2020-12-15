@@ -4,14 +4,13 @@ export default class RwbState {
   constructor(defaultState = {}) {
     this.defaultState = defaultState;
 
-    // Persisted state across sessions.
-    this.persistedState = {};
-    this.loadPersistedState();
-
     // Game state contains ALL state info for the game in progress,
     // and can be used to re-render the game board.
     this.state = {};
     this.reset();
+
+    // Overwrite with persisted state across sessions.
+    this.loadPersistedState();
   }
 
   countPlayersAtLocation(x, y) {
@@ -37,17 +36,19 @@ export default class RwbState {
   }
 
   loadPersistedState() {
-    this.persistedState.mapDifficulty = window.localStorage.getItem('difficulty') || 1;
-    this.persistedState.highScore = window.localStorage.getItem('highScore') || 0;
+    this.state.mapDifficulty = window.localStorage.getItem('mapDifficulty') || 1;
+    this.state.highScore = window.localStorage.getItem('highScore') || 0;
   }
 
   reset() {
     this.state = Object.assign(this.defaultState, {
       currentTurn: 0,
-      currentActivePlayer: 0,
+      currentActivePlayer: -1, // Hack
+      gameStatus: 0, // 0: Not started, 1: Started, 2: Done
+      highScore: 0,
       mapSeed: '',
-      mapDifficulty: this.persistedState.mapDifficulty,
-      playersCount: 4,
+      mapDifficulty: 1,
+      playersCount: 1,
       players: [
         {
           controller: 'human', // human, ai-easy, ai-hard
@@ -80,11 +81,15 @@ export default class RwbState {
   }
 
   savePersistedState() {
-    window.localStorage.setItem('difficulty', this.persistedState.mapDifficulty);
-    window.localStorage.setItem('highScore', this.persistedState.highScore);
+    window.localStorage.setItem('mapDifficulty', this.state.mapDifficulty);
+    window.localStorage.setItem('highScore', this.state.highScore);
   }
 
   set(key, data) {
+    if (key.substr(0, 12) === 'gameOptions.') {
+      throw Error('Blocked attempt to change game options from game state.');
+    }
+    console.log('ok');
     deepSet(this.state, key, data);
   }
 }
