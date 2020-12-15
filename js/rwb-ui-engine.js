@@ -20,6 +20,14 @@ export default class RwbUiEngine {
     this.displayOptions = Object.assign(this.displayOptions, displayOptions);
     this.displayOptions.autoResize = (this.displayOptions.width === null || this.displayOptions.height === null);
 
+    // Local view data.
+    this.data = {
+      menu: {
+        mapDifficulty: this.gameState.get('mapDifficulty'),
+        playerController: [1, 0, 0, 0],
+      },
+    };
+
     // Create alias for Pixi textures.
     this.textures = null;
 
@@ -69,6 +77,8 @@ export default class RwbUiEngine {
       height: 100,
       backgroundColor: 0xe0e0e0,
     });
+
+    this.handleEvents();
   }
 
   /**
@@ -117,6 +127,14 @@ export default class RwbUiEngine {
       throw Error('Error: Grid size too small to be playable! Please increase grid width/height.');
     }
     return gridSizePx;
+  }
+
+  computeDisplaySize() {
+    if (this.displayOptions.autoResize) {
+      const windowSize = RwbUiEngine.getViewportSize();
+      this.displayOptions.width = windowSize.width;
+      this.displayOptions.height = windowSize.height;
+    }
   }
 
   computeGameLayout() {
@@ -243,18 +261,37 @@ export default class RwbUiEngine {
     this.updateUiMessage(name, extendedOptions);
   }
 
-  computeDisplaySize() {
-    if (this.displayOptions.autoResize) {
-      const windowSize = RwbUiEngine.getViewportSize();
-      this.displayOptions.width = windowSize.width;
-      this.displayOptions.height = windowSize.height;
-    }
+  /**
+   * Hack to allow this class to listen to events.
+   */
+  handleEvents() {
+    // Create a DOM EventTarget object
+    const target = document.createTextNode(null);
+
+    // Pass EventTarget interface calls to DOM EventTarget object
+    this.addEventListener = target.addEventListener.bind(target);
+    this.removeEventListener = target.removeEventListener.bind(target);
+    this.dispatchEvent = target.dispatchEvent.bind(target);
   }
 
   handleWindowResize() {
     if (this.gameState.get('gameStatus') === 0) {
+      this.ui.containers.base.visible = true
+      this.ui.containers.menuMain.visible = true
+      this.ui.containers.menuPause.visible = false
+      this.ui.containers.map.visible = false
+      this.ui.containers.sprites.visible = false
+      this.ui.containers.controls.visible = false
+      this.ui.containers.messages.visible = false
       this.computeMenuLayout();
     } else {
+      this.ui.containers.base.visible = false
+      this.ui.containers.menuMain.visible = false
+      this.ui.containers.menuPause.visible = this.gameState.get('gameStatus') === 2;
+      this.ui.containers.map.visible = true
+      this.ui.containers.sprites.visible = true
+      this.ui.containers.controls.visible = true
+      this.ui.containers.messages.visible = true
       this.computeGameLayout();
     }
     this.repositionUiElements();
@@ -309,8 +346,8 @@ export default class RwbUiEngine {
 
   initGameControls() {
     // Draw base board.
-    this.createRectangle('board', { fill: 0x3090ff });
-    this.createRectangle('controlsArea', { fill: 0x303030 });
+    this.createRectangle('board', { fill: 0x3090ff, container: 'map' });
+    this.createRectangle('controlsArea', { fill: 0x303030, container: 'map' });
 
     // Init pause menu buttons.
     for (const btnText of ['Resume', 'Abandon']) {
@@ -339,14 +376,6 @@ export default class RwbUiEngine {
         this.ui.containers.controls.addChild(btn);
       }
     }
-
-    // TODO: Attach events
-    // buttonStartGame.addEventListener('click', () => {
-    //   this.newGame();
-    // });
-    // buttonResetGame.addEventListener('click', () => {
-    //   this.reset();
-    // });
   }
 
   initMenu() {
@@ -363,32 +392,44 @@ export default class RwbUiEngine {
     this.createUiMessage('menuDifficulty', { container: 'menuMain', fill: 0xffffff, align: 'center' });
 
     // Controller faces.
-    const currentPlayersCount = this.gameState.get('playersCount');
     for (let i = 0; i < this.displayOptions.maxPlayersCount; i++) {
-      const texture = (currentPlayersCount > i ? 'face-1' : 'face-0');
+      const texture = `face-${this.data.menu.playerController[i]}`;
       const btn = new PIXI.Sprite(this.textures[texture]);
       this.ui.objects.controllerFaces.push(btn);
       this.ui.containers.menuMain.addChild(btn);
     }
 
     // Map difficulty.
-    const mapDifficulty = this.gameState.get('mapDifficulty');
-    const btnDifficulty = new PIXI.Sprite(this.textures[`difficulty-${mapDifficulty}`]);
+    const btnDifficulty = new PIXI.Sprite(this.textures[`difficulty-${this.data.menu.mapDifficulty}`]);
     this.ui.objects.mapDifficulty = btnDifficulty;
     this.ui.containers.menuMain.addChild(btnDifficulty);
 
-    // Add 10 arrow buttons for swapping map difficulty and player controller.
+    // Add 8 arrow buttons for swapping map difficulty and players 2-4 controller.
     for (let i = 0; i < 10; i++) {
       const texture = i % 2 === 0 ? 'btn-left' : 'btn-right';
       const btn = new PIXI.Sprite(this.textures[texture]);
+      btn.interactive = true;
       this.ui.objects.menuMainControls.push(btn);
       this.ui.containers.menuMain.addChild(btn);
+      if (i < 2) {
+        btn.on('click', () => {
+          this.toggleMapDifficulty(i % 2 === 0);
+        });
+      } else {
+        btn.on('click', () => {
+          this.togglePlayer(Math.floor(i / 2), i % 2 === 0);
+        });
+      }
     }
 
     // Start game button.
     const btnStart = new PIXI.Sprite(this.textures['btn-start']);
+    btnStart.interactive = true;
     this.ui.objects.btnStartGame = btnStart;
     this.ui.containers.menuMain.addChild(btnStart);
+    btnStart.on('click', () => {
+      this.dispatchEvent(new CustomEvent('newGame', { detail: this.data.menu }));
+    });
   }
 
   initUiMessages() {
@@ -481,7 +522,7 @@ export default class RwbUiEngine {
     }
 
     // Difficulty and player buttons.
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 8; i++) {
       this.ui.objects.menuMainControls[i].width = 0.5 * this.displayOptions.titleFontSize;
       this.ui.objects.menuMainControls[i].height = 0.5 * this.displayOptions.titleFontSize;
       let x;
@@ -493,7 +534,7 @@ export default class RwbUiEngine {
         y = marginTop + 5.75 * this.displayOptions.titleFontSize;
       } else {
         // Player buttons.
-        x = Math.floor(i / 2) / 5 * this.displayOptions.startScreen.width + xAdjustment;
+        x = Math.floor(i / 2 + 1) / 5 * this.displayOptions.startScreen.width + xAdjustment;
         y = marginTop + 9.75 * this.displayOptions.titleFontSize;
       }
       this.ui.objects.menuMainControls[i].position.set(x, y);
@@ -586,6 +627,41 @@ export default class RwbUiEngine {
       // Reposition controls.
       this.repositionGameControls();
     }
+  }
+
+  togglePlayer(index, isPrevious = false) {
+    // If previous index is empty, then player cannot be toggled.
+    if (this.data.menu.playerController[index - 1] === 0) {
+      return
+    }
+    let newController = this.data.menu.playerController[index] + (isPrevious ? -1 : 1);
+    if (newController < 0) {
+      newController = 3;
+    }
+    if (newController > 3) {
+      newController = 0;
+    }
+    this.data.menu.playerController[index] = newController;
+    this.ui.objects.controllerFaces[index].texture = this.textures[`face-${newController}`];
+    // If current index is now empty, toggle all players after current player to become empty.
+    if (newController === 0) {
+      for (let i = index + 1; i < 4; i++) {
+        this.data.menu.playerController[i] = 0;
+        this.ui.objects.controllerFaces[i].texture = this.textures[`face-0`];
+      }
+    }
+  }
+
+  toggleMapDifficulty(isPrevious = false) {
+    let newDifficulty = this.data.menu.mapDifficulty + (isPrevious ? -1 : 1);
+    if (newDifficulty < 0) {
+      newDifficulty = 3;
+    }
+    if (newDifficulty > 3) {
+      newDifficulty = 0;
+    }
+    this.data.menu.mapDifficulty = newDifficulty;
+    this.ui.objects.mapDifficulty.texture = this.textures[`difficulty-${newDifficulty}`];
   }
 
   updateUiMessage(name, options) {

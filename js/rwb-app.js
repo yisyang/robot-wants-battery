@@ -56,6 +56,9 @@ export default class RwbApp {
 
   init() {
     this.uiEngine.init().then(() => {
+      this.uiEngine.addEventListener('newGame', (e) => {
+        this.newGame(e.detail);
+      });
       // Trigger it manually for initial rendering.
       this.uiEngine.handleWindowResize();
       console.log('UI engine initialized complete.');
@@ -82,9 +85,6 @@ export default class RwbApp {
     }
     const randomSeeder = new RandomSeeder(seedPhrase);
 
-    this.uiEngine.updateUiMessage('mapInfo', { text: `Map Seed: ${seedPhrase}` });
-    this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
-
     // Compute water tiles.
     this.gameState.set('mapTiles', []);
     const waterTileChances = this.gameOptions.waterTileChances[this.gameState.get('mapDifficulty')];
@@ -102,16 +102,32 @@ export default class RwbApp {
       'start');
     this.gameState.set(`mapTiles.${this.gameOptions.endLocation.x}.${this.gameOptions.endLocation.y}.type`, 'end');
 
-    // Create map tiles.
-    this.uiEngine.createGameTiles(this.gameState.get('mapTiles'));
-
     // Place player pieces.
     this.createPlayerPieces();
+
+    // Update UI.
+    this.uiEngine.updateUiMessage('mapInfo', { text: `Map Seed: ${seedPhrase}` });
+    this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
+    this.uiEngine.createGameTiles(this.gameState.get('mapTiles'));
     this.uiEngine.createPlayerPieces(this.gameState.get('playersCount'));
   }
 
-  newGame() {
+  newGame(options) {
+    this.gameState.set('mapDifficulty', options.mapDifficulty)
+    this.gameState.set('players[1].controller', options.playerController[1])
+    this.gameState.set('players[2].controller', options.playerController[2])
+    this.gameState.set('players[3].controller', options.playerController[3])
+    if (options.playerController[3] !== 0) {
+      this.gameState.set('playersCount', 4)
+    } else if (options.playerController[2] !== 0) {
+      this.gameState.set('playersCount', 3)
+    } else if (options.playerController[1] !== 0) {
+      this.gameState.set('playersCount', 2)
+    } else {
+      this.gameState.set('playersCount', 1)
+    }
     this.gameState.savePersistedState();
+    this.gameState.set('gameStatus', 1)
     this.generateBoard();
     this.uiEngine.handleWindowResize();
     this.nextTurn();
