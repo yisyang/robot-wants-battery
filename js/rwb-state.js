@@ -7,6 +7,8 @@ export default class RwbState {
     // Game state contains ALL state info for the game in progress,
     // and can be used to re-render the game board.
     this.state = {
+      diceValue: [0, 0],
+      diceMoved: [0, 0],
       highScore: 0,
       mapSeed: '',
       mapDifficulty: 1,

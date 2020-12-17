@@ -10,18 +10,24 @@ export default class RwbUiGame {
       height: null,
       board: {},
       controls: {},
+      canMove: false,
+    };
+
+    // Local view data.
+    this.data = {
+      playerLocations: [],
     };
   }
 
   clearGameMap() {
     // Clear map and sprites containers.
-    this.engine.ui.objects.tiles.map((row) => {
-      row.map((tile) => {
+    this.engine.ui.objects.tiles.forEach((row) => {
+      row.forEach((tile) => {
         this.engine.ui.containers.map.removeChild(tile);
       });
     });
     this.engine.ui.objects.tiles = [];
-    this.engine.ui.objects.playerPieces.map((pp) => {
+    this.engine.ui.objects.playerPieces.forEach((pp) => {
       this.engine.ui.containers.sprites.removeChild(pp);
     });
     this.engine.ui.objects.playerPieces = [];
@@ -142,12 +148,34 @@ export default class RwbUiGame {
     }
   }
 
+  enableDiceButtons(diceIndex) {
+    ['Up', 'Down', 'Left', 'Right'].forEach((direction) => {
+      const btn = this.engine.ui.objects[`btnDice${diceIndex}${direction}`];
+      btn.alpha = 1;
+      this.options.canMove = true;
+    });
+  }
+
   /**
    * Initialize game UI.
    */
   init() {
     this.initGameControls();
     this.initUiMessages();
+
+    this.engine.addEventListener('planMove', (e) => {
+      this.previewMovement(e.detail);
+    });
+
+    this.engine.addEventListener('cancel', () => {
+      // Cancel movement
+      this.cancelMovement();
+    });
+
+    this.engine.addEventListener('confirm', () => {
+      // Confirm movement
+      this.moveRobot();
+    });
   }
 
   initGameControls() {
@@ -155,36 +183,50 @@ export default class RwbUiGame {
     this.engine.createContainerRectangle('board', { fill: 0x3090ff, container: 'map' });
     this.engine.createContainerRectangle('controlsArea', { fill: 0x303030, container: 'map' });
 
-    // Init pause menu related buttons.
-    for (const btnText of ['Resume', 'Abandon', 'Pause']) {
-      const btn = new PIXI.Sprite(this.engine.textures[`btn-${btnText.toLowerCase()}`]);
-      btn.interactive = true;
-      btn.on('click', () => {
-        this.engine.dispatchEvent(new CustomEvent(btnText.toLowerCase(), {}));
+    // Init pause menu buttons and game control buttons.
+    Object.entries({
+      menuPause: ['Resume', 'Abandon'],
+      controls: ['Pause', 'Cancel', 'Confirm'],
+    }).forEach((e) => {
+      const key = e[0];
+      e[1].forEach((btnText) => {
+        const btn = new PIXI.Sprite(this.engine.textures[`btn-${btnText.toLowerCase()}`]);
+        btn.interactive = true;
+        btn.on('click', () => {
+          this.engine.dispatchEvent(new CustomEvent(btnText.toLowerCase(), {}));
+        });
+        this.engine.ui.objects[key][`btn${btnText}`] = btn;
+        this.engine.ui.containers[key].addChild(btn);
       });
-      this.engine.ui.objects.menu[`btn${btnText}`] = btn;
-    }
-    this.engine.ui.containers.menuPause.addChild(this.engine.ui.objects.menu.btnResume);
-    this.engine.ui.containers.menuPause.addChild(this.engine.ui.objects.menu.btnAbandon);
-    // Pause button itself is displayed on main game screen.
-    this.engine.ui.containers.controls.addChild(this.engine.ui.objects.menu.btnPause);
+    });
 
     // Dice faces.
     // Two dice, init at 0.
-    for (let i = 0; i < 2; i++) {
+    [0, 1].forEach((i) => {
       const diceFace = new PIXI.Sprite(this.engine.textures['dice-face-0']);
       this.engine.ui.objects.diceFaces.push(diceFace);
       this.engine.ui.containers.controls.addChild(diceFace);
 
       // Dice controls.
       // Two sets, one for each dice.
-      for (const direction of ['Up', 'Down', 'Left', 'Right']) {
+      ['Up', 'Down', 'Left', 'Right'].forEach((direction) => {
         const btn = new PIXI.Sprite(this.engine.textures[`btn-${direction.toLowerCase()}`]);
         btn.interactive = true;
+        btn.alpha = 0.3;
         this.engine.ui.objects[`btnDice${i}${direction}`] = btn;
         this.engine.ui.containers.controls.addChild(btn);
-      }
-    }
+        btn.on('click', () => {
+          if (this.options.canMove) {
+            this.engine.dispatchEvent(new CustomEvent('planMove', {
+              detail: {
+                dice: i,
+                direction,
+              },
+            }));
+          }
+        });
+      });
+    });
   }
 
   initUiMessages() {
@@ -198,6 +240,49 @@ export default class RwbUiGame {
     this.engine.createUiMessage('playerTurn', { align: 'center' });
     this.engine.createUiMessage('gameScore', { align: 'right' });
     this.engine.createUiMessage('hiScore', { align: 'right' });
+  }
+
+  cancelMovement() {
+    if (this.options.canMove) {
+      // TODO: Remove preview lines
+    }
+  }
+
+  previewMovement(options) {
+    const diceMoved = this.gameState.get(`diceMoved[${options.dice}]`);
+    const diceValue = this.gameState.get(`diceValue[${options.dice}]`);
+    if (diceMoved || diceValue === 0) {
+      return;
+    }
+
+    // TODO: Draw preview lines
+    // // Set dice as moved.
+    // this.gameState.set(`diceValue[${options.dice}]`, 1)
+    const playerIndex = this.gameState.get('currentActivePlayer');
+    this.data.playerLocations = this.gameState.get('playerLocations');
+    // switch(options.direction) {
+    //   case 'Up':
+    //     playerLocation.y -= 1;
+    //     break;
+    //   case 'Down':
+    //     playerLocation.y += 1;
+    //     break;
+    //   case 'Left':
+    //     playerLocation.x -= 1;
+    //     break;
+    //   case 'Right':
+    //     playerLocation.x += 1;
+    //     break;
+    // }
+  }
+
+  moveRobot() {
+    // TODO: Move player piece slowly, 1 square at a time, and check for death.
+    // Rotate on death.
+    // dispatch playerLost on death
+    // dispatch diceMoved on move end
+    // dispatch playerMoved on both dice moved
+    // this.uiEngine.modules.game.moveRobotStep()
   }
 
   nextTurn() {
@@ -224,6 +309,22 @@ export default class RwbUiGame {
           fontSize: this.options.infoTextSize,
         });
       },
+    });
+
+    this.options.canMove = false;
+    this.engine.ui.objects.controls.btnCancel.alpha = 0.3;
+    this.engine.ui.objects.controls.btnConfirm.alpha = 0.3;
+    [0, 1].forEach((i) => {
+      this.engine.addTransition(`diceFaces[${i}]`, {
+        rollDice: true,
+        steps: 100,
+        cb: () => {
+          const diceValue = this.gameState.get(`diceValue[${i}]`);
+          this.engine.ui.objects.diceFaces[i].texture = this.engine.textures[`dice-face-${diceValue}`];
+
+          this.enableDiceButtons(i);
+        },
+      });
     });
   }
 
@@ -254,12 +355,16 @@ export default class RwbUiGame {
 
   repositionGameControls() {
     // Update pause menu.
-    for (const btnText of ['Resume', 'Abandon']) {
-      this.engine.ui.objects.menu[`btn${btnText}`].width = 32 * this.engine.options.du;
-      this.engine.ui.objects.menu[`btn${btnText}`].height = 10 * this.engine.options.du;
-    }
-    this.engine.ui.objects.menu.btnResume.position.set(this.engine.options.width / 2, 40 * this.engine.options.du);
-    this.engine.ui.objects.menu.btnAbandon.position.set(this.engine.options.width / 2, 60 * this.engine.options.du);
+    ['Resume', 'Abandon'].forEach((btnText) => {
+      this.engine.ui.objects.menuPause[`btn${btnText}`].width = 32 * this.engine.options.du;
+      this.engine.ui.objects.menuPause[`btn${btnText}`].height = 10 * this.engine.options.du;
+    });
+    this.engine.ui.objects.menuPause.btnResume.position.set(
+      this.engine.options.width / 2, 0.4 * this.engine.options.height,
+    );
+    this.engine.ui.objects.menuPause.btnAbandon.position.set(
+      this.engine.options.width / 2, 0.6 * this.engine.options.height,
+    );
 
     // Update controls area.
     this.engine.ui.objects.map.controlsArea.position.set(
@@ -270,12 +375,36 @@ export default class RwbUiGame {
     this.engine.ui.objects.map.controlsArea.height = this.options.controls.height;
 
     // Pause button.
-    this.engine.ui.objects.menu.btnPause.width = 15 * this.options.controls.du;
-    this.engine.ui.objects.menu.btnPause.height = 15 * this.options.controls.du;
-    this.engine.ui.objects.menu.btnPause.position.set(
+    this.engine.ui.objects.controls.btnPause.width = 15 * this.options.controls.du;
+    this.engine.ui.objects.controls.btnPause.height = 15 * this.options.controls.du;
+    this.engine.ui.objects.controls.btnPause.position.set(
       this.options.controls.x + this.options.controls.width - 10 * this.options.controls.du,
       this.options.controls.y + 10 * this.options.controls.du,
     );
+
+    const btnTexts = ['Cancel', 'Confirm'];
+    [0, 1].forEach((i) => {
+      const btn = this.engine.ui.objects.controls[`btn${btnTexts[i]}`];
+      btn.width = 25 * this.options.controls.du;
+      btn.height = 25 * this.options.controls.du;
+      if (this.options.displayMode === 'landscape') {
+        // Landscape.
+        btn.position.set(
+          this.options.mx
+          + this.options.board.widthWP
+          + (30 + i * 40) * this.options.controls.du,
+          0.85 * this.options.controls.height,
+        );
+      } else {
+        // Portrait.
+        btn.position.set(
+          0.85 * this.options.controls.width,
+          this.options.my
+          + this.options.board.heightWP
+          + (30 + i * 40) * this.options.controls.du,
+        );
+      }
+    });
 
     // Dice faces.
     const baselineX = this.options.mx
@@ -288,15 +417,15 @@ export default class RwbUiGame {
     ];
     if (this.options.displayMode === 'landscape') {
       // Landscape.
-      diceFacePos[0][1] = 0.27 * this.options.controls.height;
-      diceFacePos[1][1] = 0.73 * this.options.controls.height;
+      diceFacePos[0][1] = 0.2 * this.options.controls.height;
+      diceFacePos[1][1] = 0.55 * this.options.controls.height;
     } else {
       // Portrait.
-      diceFacePos[0][0] = 0.27 * this.options.controls.width;
-      diceFacePos[1][0] = 0.73 * this.options.controls.width;
+      diceFacePos[0][0] = 0.2 * this.options.controls.width;
+      diceFacePos[1][0] = 0.55 * this.options.controls.width;
     }
     // Two dice, init at 0.
-    for (let i = 0; i < 2; i++) {
+    [0, 1].forEach((i) => {
       this.engine.ui.objects.diceFaces[i].width = 25 * this.options.controls.du;
       this.engine.ui.objects.diceFaces[i].height = 25 * this.options.controls.du;
       this.engine.ui.objects.diceFaces[i].position.set(diceFacePos[i][0], diceFacePos[i][1]);
@@ -316,7 +445,7 @@ export default class RwbUiGame {
           diceFacePos[i][1] + 25 * val[2] * this.options.controls.du,
         );
       }
-    }
+    });
   }
 
   repositionGameMessages() {
@@ -394,5 +523,6 @@ export default class RwbUiGame {
     this.engine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
     this.createGameTiles(this.gameState.get('mapTiles'));
     this.createPlayerPieces(this.gameState.get('playersCount'));
+    this.options.canMove = false;
   }
 }

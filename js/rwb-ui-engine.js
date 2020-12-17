@@ -40,17 +40,23 @@ export default class RwbUiEngine {
           menuBase: null,
           menuOptionsArea: null,
         },
+        controls: {
+          btnCancel: null,
+          btnConfirm: null,
+          btnPause: null,
+        },
         map: {
           board: null,
           controlsArea: null,
         },
         menu: {
-          btnAbandon: null,
-          btnPause: null,
-          btnResume: null,
           btnStartGame: null,
           mapDifficulty: null,
           controls: [],
+        },
+        menuPause: {
+          btnAbandon: null,
+          btnResume: null,
         },
         messages: {
           title: null,
@@ -106,6 +112,7 @@ export default class RwbUiEngine {
       element, // String of subpath from ui.objects.
       translate: null,
       scale: null,
+      rollDice: null,
       rotate: null,
       step: 0,
       steps: 100,
@@ -278,6 +285,12 @@ export default class RwbUiEngine {
       if (tData.rotate !== null) {
         const stepRotate = tData.stepProgress * tData.rotate;
         tObj.rotation += stepRotate;
+      }
+
+      // Special: roll dice
+      if (tData.rollDice !== null) {
+        const diceFace = Math.floor(Math.random() * 6) + 1;
+        tObj.texture = this.textures[`dice-face-${diceFace}`];
       }
 
       // Done

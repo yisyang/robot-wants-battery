@@ -13,7 +13,7 @@ export default class RwbApp {
       gridCountX: 16,
       gridCountY: null,
       maxScore: 100,
-      controllersAllowed: [0, 1, 2, 3],
+      controllersAllowed: [0, 1],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
       waterTileChances: [0.05, 0.15, 0.25, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
@@ -48,12 +48,10 @@ export default class RwbApp {
       gridCountX: this.gameOptions.gridCountX,
       gridCountY: this.gameOptions.gridCountY,
     });
-
-    this.init();
   }
 
   init() {
-    this.uiEngine.init().then(() => {
+    return this.uiEngine.init().then(() => {
       this.uiEngine.addEventListener('newGame', (e) => {
         this.newGame(e.detail);
       });
@@ -76,20 +74,20 @@ export default class RwbApp {
         this.gameState.set('gameStatus', 0);
         this.uiEngine.refreshDisplay();
       });
+      this.uiEngine.addEventListener('moveRobot', (e) => {
+        this.moveRobot(e.detail);
+      });
       // Trigger it manually for initial rendering.
       this.uiEngine.refreshDisplay();
-      console.log('UI engine initialized complete.');
-    }).catch((e) => {
-      console.log('Failed to initialize UI.');
-      console.error(e);
+      console.log('UI engine initialized.');
     });
   }
 
   createPlayerPieces() {
     for (let i = 0, playersCount = this.gameState.get('playersCount'); i < playersCount; i++) {
-      this.gameState.set(`players.${i}.alive`, true);
-      this.gameState.set(`players.${i}.x`, this.gameOptions.startLocation.x);
-      this.gameState.set(`players.${i}.y`, this.gameOptions.startLocation.y);
+      this.gameState.set(`players[${i}].alive`, true);
+      this.gameState.set(`players[${i}].x`, this.gameOptions.startLocation.x);
+      this.gameState.set(`players[${i}].y`, this.gameOptions.startLocation.y);
     }
   }
 
@@ -106,9 +104,9 @@ export default class RwbApp {
     this.gameState.set('mapTiles', []);
     const waterTileChances = this.gameOptions.waterTileChances[this.gameState.get('mapDifficulty')];
     for (let i = 0; i < this.gameOptions.gridCountX; i++) {
-      this.gameState.set(`mapTiles.${i}`, []);
+      this.gameState.set(`mapTiles[${i}]`, []);
       for (let j = 0; j < this.gameOptions.gridCountY; j++) {
-        this.gameState.set(`mapTiles.${i}.${j}`, {
+        this.gameState.set(`mapTiles[${i}][${j}]`, {
           type: randomSeeder.rand() < waterTileChances ? 'water' : 'land',
         });
       }
@@ -169,6 +167,11 @@ export default class RwbApp {
         this.gameOptions.get('maxScore') - currentTurn * scoreReductionMultiplier));
     }
     this.gameState.set('currentActivePlayer', currentActivePlayer);
+
+    [0, 1].forEach((i) => {
+      this.gameState.set(`diceValue[${i}]`, Math.floor(Math.random() * 6) + 1);
+      this.gameState.set(`diceMoved[${i}]`, 0);
+    });
 
     this.uiEngine.modules.game.nextTurn();
   }
