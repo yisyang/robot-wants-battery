@@ -6,7 +6,38 @@ export default class RwbState {
 
     // Game state contains ALL state info for the game in progress,
     // and can be used to re-render the game board.
-    this.state = {};
+    this.state = {
+      highScore: 0,
+      mapSeed: '',
+      mapDifficulty: 1,
+      playersCount: 1,
+      players: [
+        {
+          controller: 1, // 0: none, 1: human, 2: ai-easy, 3: ai-hard, 4: open (remote)
+          name: 'Player 1',
+          alive: false,
+          score: 0,
+        },
+        {
+          controller: 0,
+          name: 'Player 2',
+          alive: false,
+          score: 0,
+        },
+        {
+          controller: 0,
+          name: 'Player 3',
+          alive: false,
+          score: 0,
+        },
+        {
+          controller: 0,
+          name: 'Player 4',
+          alive: false,
+          score: 0,
+        },
+      ],
+    };
     this.reset();
 
     // Overwrite with persisted state across sessions.
@@ -41,44 +72,15 @@ export default class RwbState {
   }
 
   reset() {
-    this.state = {
+    Object.assign(this.state, {
       ...this.defaultState,
       currentTurn: 0,
       currentActivePlayer: -1, // Hack
       gameStatus: 0, // 0: Not started, 1: Started, 2: Paused, 3: Done
-      highScore: 0,
-      mapSeed: '',
-      mapDifficulty: 1,
-      playersCount: 1,
-      players: [
-        {
-          controller: 1, // 0: none, 1: human, 2: ai-easy, 3: ai-hard, 4: open (remote)
-          name: 'Player 1',
-          alive: false,
-          score: 0,
-        },
-        {
-          controller: 0,
-          name: 'Player 2',
-          alive: false,
-          score: 0,
-        },
-        {
-          controller: 0,
-          name: 'Player 3',
-          alive: false,
-          score: 0,
-        },
-        {
-          controller: 0,
-          name: 'Player 4',
-          alive: false,
-          score: 0,
-        },
-      ],
       playerLocations: [],
+      mapSeed: '',
       mapTiles: [],
-    };
+    });
   }
 
   savePersistedState() {

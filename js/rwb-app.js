@@ -12,7 +12,6 @@ export default class RwbApp {
       },
       gridCountX: 16,
       gridCountY: null,
-      playerLocations: [],
       maxScore: 100,
       controllersAllowed: [0, 1, 2, 3],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
@@ -57,6 +56,13 @@ export default class RwbApp {
     this.uiEngine.init().then(() => {
       this.uiEngine.addEventListener('newGame', (e) => {
         this.newGame(e.detail);
+      });
+      this.uiEngine.addEventListener('seedNewGame', () => {
+        /* eslint-disable-next-line no-alert */
+        const seed = window.prompt('Enter map seed to start new game with seed.', '');
+        if (seed !== '') {
+          this.newGame({ mapSeed: seed.substr(0, 8) });
+        }
       });
       this.uiEngine.addEventListener('pause', () => {
         this.gameState.set('gameStatus', 2);
@@ -115,35 +121,37 @@ export default class RwbApp {
 
     // Place player pieces.
     this.createPlayerPieces();
-
-    // Update UI.
-    const difficultyLabel = this.gameState.get('gameOptions.difficultyLabels')[this.gameState.get('mapDifficulty')];
-    this.uiEngine.clearGameMap();
-    this.uiEngine.updateUiMessage('mapDifficulty', { text: `Difficulty: ${difficultyLabel}` });
-    this.uiEngine.updateUiMessage('mapSeed', { text: `Map Seed: ${seedPhrase}` });
-    this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
-    this.uiEngine.createGameTiles(this.gameState.get('mapTiles'));
-    this.uiEngine.createPlayerPieces(this.gameState.get('playersCount'));
   }
 
-  newGame(options) {
+  newGame(options = null) {
     this.gameState.reset();
-    this.gameState.set('mapDifficulty', options.mapDifficulty);
-    this.gameState.set('players[1].controller', options.playerController[1]);
-    this.gameState.set('players[2].controller', options.playerController[2]);
-    this.gameState.set('players[3].controller', options.playerController[3]);
-    if (options.playerController[3] !== 0) {
-      this.gameState.set('playersCount', 4);
-    } else if (options.playerController[2] !== 0) {
-      this.gameState.set('playersCount', 3);
-    } else if (options.playerController[1] !== 0) {
-      this.gameState.set('playersCount', 2);
-    } else {
-      this.gameState.set('playersCount', 1);
+    if (options.mapSeed !== undefined) {
+      this.gameState.set('mapSeed', options.mapSeed);
     }
+    if (options.mapDifficulty !== undefined) {
+      this.gameState.set('mapDifficulty', options.mapDifficulty);
+      this.gameState.set('players[1].controller', options.playerController[1]);
+      this.gameState.set('players[2].controller', options.playerController[2]);
+      this.gameState.set('players[3].controller', options.playerController[3]);
+      if (options.playerController[3] !== 0) {
+        this.gameState.set('playersCount', 4);
+      } else if (options.playerController[2] !== 0) {
+        this.gameState.set('playersCount', 3);
+      } else if (options.playerController[1] !== 0) {
+        this.gameState.set('playersCount', 2);
+      } else {
+        this.gameState.set('playersCount', 1);
+      }
+    }
+    // Put all players back at start location.
+    this.gameState.set('playerLocations',
+      [...Array(this.gameState.get('playersCount')).keys()].map(
+        () => this.gameOptions.startLocation,
+      ));
     this.gameState.savePersistedState();
     this.gameState.set('gameStatus', 1);
     this.generateBoard();
+    this.uiEngine.modules.game.startGame();
     this.uiEngine.refreshDisplay();
     this.nextTurn();
   }
@@ -162,6 +170,6 @@ export default class RwbApp {
     }
     this.gameState.set('currentActivePlayer', currentActivePlayer);
 
-    this.uiEngine.nextTurn();
+    this.uiEngine.modules.game.nextTurn();
   }
 }
