@@ -36,12 +36,13 @@ export default class RwbState {
   }
 
   loadPersistedState() {
-    this.state.mapDifficulty = parseInt(window.localStorage.getItem('mapDifficulty')) || 1;
-    this.state.highScore = parseInt(window.localStorage.getItem('highScore')) || 0;
+    this.state.mapDifficulty = parseInt(window.localStorage.getItem('mapDifficulty'), 10) || 1;
+    this.state.highScore = parseInt(window.localStorage.getItem('highScore'), 10) || 0;
   }
 
   reset() {
-    this.state = Object.assign(this.defaultState, {
+    this.state = {
+      ...this.defaultState,
       currentTurn: 0,
       currentActivePlayer: -1, // Hack
       gameStatus: 0, // 0: Not started, 1: Started, 2: Paused, 3: Done
@@ -77,7 +78,7 @@ export default class RwbState {
       ],
       playerLocations: [],
       mapTiles: [],
-    });
+    };
   }
 
   savePersistedState() {

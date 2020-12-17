@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import { get as deepGet } from 'lodash-es';
 
 export default class RwbUiEngine {
   constructor(gameState, displayOptions = {}) {
@@ -11,13 +12,14 @@ export default class RwbUiEngine {
       height: null,
       board: {},
       controls: {},
+      game: {},
       startScreen: {},
       holderDivId: '',
       gridCountX: 0,
       gridCountY: 0,
       maxPlayersCount: 4, // Hardcoded.
     };
-    this.displayOptions = Object.assign(this.displayOptions, displayOptions);
+    Object.assign(this.displayOptions, displayOptions);
     this.displayOptions.autoResize = (this.displayOptions.width === null || this.displayOptions.height === null);
 
     // Local view data.
@@ -33,7 +35,7 @@ export default class RwbUiEngine {
 
     // Properties .ui holds various Pixi objects.
     this.ui = {
-      // Pixi containers
+      // Pixi containers.
       containers: {
         base: null,
         map: null,
@@ -43,39 +45,46 @@ export default class RwbUiEngine {
         menuMain: null,
         menuPause: null,
       },
-      // Pixi sprites as JS objects
+      // Pixi sprites as JS objects.
       objects: {
-        btnAbandon: null,
-        btnPause: null,
-        btnResume: null,
-        btnStartGame: null,
-        btnUp: null,
-        btnDown: null,
-        btnLeft: null,
-        btnRight: null,
-        menuBase: null,
-        menuOptionsArea: null,
-        menuMainControls: [],
-        controllerFaces: [],
-        mapDifficulty: null,
-        diceFaces: [],
+        base: {
+          menuBase: null,
+          menuOptionsArea: null,
+        },
+        map: {
+          board: null,
+          controlsArea: null,
+        },
+        menu: {
+          btnAbandon: null,
+          btnPause: null,
+          btnResume: null,
+          btnStartGame: null,
+          mapDifficulty: null,
+          controls: [],
+        },
         messages: {
           title: null,
-          mapInfo: null,
+          mapDifficulty: null,
+          mapSeed: null,
           gameTurn: null,
           playerTurn: null,
           gameScore: null,
           hiScore: null,
         },
+        controllerFaces: [],
+        diceFaces: [],
         playerPieces: [],
         tiles: [],
       },
+      // References to objects currently undergoing transition.
+      transition: {},
     };
 
     this.renderer = new PIXI.Application({
       width: 100, // dummy values
       height: 100,
-      backgroundColor: 0xe0e0e0,
+      backgroundColor: 0x202020,
     });
 
     this.handleEvents();
@@ -96,20 +105,49 @@ export default class RwbUiEngine {
     return { width: e[`${a}Width`], height: e[`${a}Height`] };
   }
 
-  clearStage() {
-    // Clear map and sprites containers.
-    for (const container of ['map', 'sprites']) {
-      for (let i = this.ui.containers[container].length - 1; i >= 0; i--) {
-        this.ui.containers[container].removeChild(this.ui.containers[container][i]);
+  addTransition(element, options) {
+    const tData = {
+      cb: null,
+      element, // String of subpath from ui.objects.
+      translate: null,
+      scale: null,
+      rotate: null,
+      step: 0,
+      steps: 100,
+      ...options,
+    };
+    const tObj = deepGet(this.ui.objects, tData.element);
+    // Perform initial sanitizations.
+    for (const [key, attrs] of Object.entries({ translate: ['x', 'y'], scale: ['width', 'height'] })) {
+      const tDataProp = tData[key];
+      const [attr1, attr2] = attrs;
+      if (tDataProp !== null && tDataProp.from === undefined) {
+        tDataProp.from = {};
+        tDataProp.from[attr1] = tObj[attr1];
+        tDataProp.from[attr2] = tObj[attr2];
       }
     }
-    this.ui.objects.playerPieces = [];
-    this.ui.objects.tiles = [];
+    this.ui.transition[element] = tData;
   }
 
-  clearUiMessages() {
-    for (const message of this.ui.objects.messages) {
-      message.text = '';
+  clearGameMap() {
+    // Clear map and sprites containers.
+    this.ui.objects.tiles.map((row) => {
+      row.map((tile) => {
+        this.ui.containers.map.removeChild(tile);
+      });
+    });
+    this.ui.objects.tiles = [];
+    this.ui.objects.playerPieces.map((pp) => {
+      this.ui.containers.sprites.removeChild(pp);
+    });
+    this.ui.objects.playerPieces = [];
+
+    // Clear messages.
+    for (const message of Object.values(this.ui.objects.messages)) {
+      if (message !== null) {
+        message.text = '';
+      }
     }
   }
 
@@ -120,8 +158,8 @@ export default class RwbUiEngine {
     // Additional 10% height reserved for turn/score display.
     const gridSizePxY = this.displayOptions.height / (this.displayOptions.gridCountY + 2) / 1.1;
     const gridSizePxBeforeReserveMin = Math.floor(Math.min(gridSizePxX, gridSizePxY));
-    // Reserve 30% width or height for other UI controls.
-    const gridSizePxAfterReserveMax = Math.floor(Math.max(gridSizePxX, gridSizePxY) / 1.3);
+    // Reserve 33% width or height for other UI controls.
+    const gridSizePxAfterReserveMax = Math.floor(Math.max(gridSizePxX, gridSizePxY) / 1.33);
     const gridSizePx = Math.min(gridSizePxBeforeReserveMin, gridSizePxAfterReserveMax);
     if (gridSizePx < 20) {
       throw Error('Error: Grid size too small to be playable! Please increase grid width/height.');
@@ -135,6 +173,9 @@ export default class RwbUiEngine {
       this.displayOptions.width = windowSize.width;
       this.displayOptions.height = windowSize.height;
     }
+
+    // Calculate display unit as 1/100 of the smaller dimension.
+    this.displayOptions.du = 1 / 100 * Math.min(this.displayOptions.width, this.displayOptions.height);
   }
 
   computeGameLayout() {
@@ -142,37 +183,47 @@ export default class RwbUiEngine {
 
     // Analyze container AR vs board AR, and determine if the rest of UI should be portrait of landscape.
     const containerAR = this.displayOptions.width / this.displayOptions.height;
-    // Additional 10% height reserved for turn/score display.
+    // Additional 10% height reserved for turn/score display on board area.
     const boardAR = this.displayOptions.gridCountX / this.displayOptions.gridCountY / 1.1;
     this.displayOptions.board.width = this.displayOptions.gridSizePx * this.displayOptions.gridCountX;
     this.displayOptions.board.height = this.displayOptions.gridSizePx * this.displayOptions.gridCountY;
 
-    this.displayOptions.board.marginTop = Math.floor(
+    this.displayOptions.board.pt = Math.floor(
       (1 + 0.1 * this.displayOptions.gridCountY) * this.displayOptions.gridSizePx,
     );
     if (containerAR > boardAR) {
       this.displayOptions.displayMode = 'landscape';
-      this.displayOptions.board.marginLeft = this.displayOptions.gridSizePx;
-      this.displayOptions.board.widthWithMargin = this.displayOptions.board.width
-        + 2 * this.displayOptions.board.marginLeft;
-      this.displayOptions.board.heightWithMargin = this.displayOptions.height;
-      this.displayOptions.controls.marginLeft = this.displayOptions.board.widthWithMargin;
-      this.displayOptions.controls.marginTop = 0;
-      this.displayOptions.controls.width = this.displayOptions.width - this.displayOptions.controls.marginLeft;
-      this.displayOptions.controls.height = this.displayOptions.board.heightWithMargin;
+      this.displayOptions.game.mx = Math.max(0, (this.displayOptions.width - 1.4 * this.displayOptions.height) / 2);
+      this.displayOptions.game.my = 0;
+      this.displayOptions.board.px = this.displayOptions.gridSizePx;
+      this.displayOptions.board.widthWP = this.displayOptions.board.width
+        + 2 * this.displayOptions.board.px;
+      this.displayOptions.board.heightWP = this.displayOptions.height;
+      this.displayOptions.controls.x = this.displayOptions.game.mx + this.displayOptions.board.widthWP;
+      this.displayOptions.controls.y = this.displayOptions.game.my;
+      this.displayOptions.controls.width = this.displayOptions.width
+        - this.displayOptions.controls.x - this.displayOptions.game.mx;
+      this.displayOptions.controls.height = this.displayOptions.board.heightWP;
     } else {
       this.displayOptions.displayMode = 'portrait';
-      this.displayOptions.board.marginLeft = Math.floor(
+      this.displayOptions.game.mx = 0;
+      this.displayOptions.game.my = Math.max(0, (this.displayOptions.height - 1.4 * this.displayOptions.width) / 2);
+      this.displayOptions.board.px = Math.floor(
         (this.displayOptions.width - this.displayOptions.board.width) / 2,
       );
-      this.displayOptions.board.widthWithMargin = this.displayOptions.width;
-      this.displayOptions.board.heightWithMargin = this.displayOptions.board.height
-        + this.displayOptions.board.marginTop + this.displayOptions.gridSizePx;
-      this.displayOptions.controls.marginLeft = 0;
-      this.displayOptions.controls.marginTop = this.displayOptions.board.heightWithMargin;
-      this.displayOptions.controls.width = this.displayOptions.board.widthWithMargin;
-      this.displayOptions.controls.height = this.displayOptions.height - this.displayOptions.controls.width;
+      this.displayOptions.board.widthWP = this.displayOptions.width;
+      this.displayOptions.board.heightWP = this.displayOptions.board.height
+        + this.displayOptions.board.pt + this.displayOptions.gridSizePx;
+      this.displayOptions.controls.x = this.displayOptions.game.mx;
+      this.displayOptions.controls.y = this.displayOptions.game.my + this.displayOptions.board.heightWP;
+      this.displayOptions.controls.width = this.displayOptions.board.widthWP;
+      this.displayOptions.controls.height = this.displayOptions.height
+        - this.displayOptions.controls.y - this.displayOptions.game.my;
     }
+
+    this.displayOptions.controls.du = 1 / 100 * Math.min(
+      this.displayOptions.controls.width, this.displayOptions.controls.height,
+    );
 
     this.displayOptions.infoTextSize = Math.floor(
       0.035 * this.displayOptions.gridCountY * this.displayOptions.gridSizePx,
@@ -185,24 +236,21 @@ export default class RwbUiEngine {
     this.displayOptions.startScreen.width = this.displayOptions.width;
     this.displayOptions.startScreen.height = this.displayOptions.height;
     if (this.displayOptions.height > this.displayOptions.width) {
-      this.displayOptions.startScreen.marginTop = (this.displayOptions.height - this.displayOptions.width) / 2;
+      this.displayOptions.startScreen.my = (this.displayOptions.height - this.displayOptions.width) / 2;
     } else {
-      this.displayOptions.startScreen.marginTop = 0;
+      this.displayOptions.startScreen.my = 0;
     }
 
-    // Calculate display unit as 1/100 of the smaller dimension.
-    const du = 1 / 100 * Math.min(this.displayOptions.width, this.displayOptions.height);
-
-    this.displayOptions.menuFontSize = 4 * du;
-    this.displayOptions.titleFontSize = 8 * du;
+    this.displayOptions.menuFontSize = 4 * this.displayOptions.du;
+    this.displayOptions.titleFontSize = 8 * this.displayOptions.du;
   }
 
-  createRectangle(name, data) {
+  createContainerRectangle(name, data) {
     const rect = new PIXI.Graphics();
     rect.beginFill(data.fill || 0x000000);
     rect.drawRect(0, 0, 1, 1);
     rect.endFill();
-    this.ui.objects[name] = rect;
+    this.ui.objects[data.container || 'base'][name] = rect;
     this.ui.containers[data.container || 'base'].addChild(rect);
   }
 
@@ -254,7 +302,7 @@ export default class RwbUiEngine {
       align: 'left',
       container: 'messages',
     };
-    const extendedOptions = Object.assign(defaultOptions, options);
+    const extendedOptions = { ...defaultOptions, ...options };
     const message = new PIXI.Text(options.text || '');
     this.ui.objects.messages[name] = message;
     this.ui.containers[extendedOptions.container].addChild(message);
@@ -272,29 +320,6 @@ export default class RwbUiEngine {
     this.addEventListener = target.addEventListener.bind(target);
     this.removeEventListener = target.removeEventListener.bind(target);
     this.dispatchEvent = target.dispatchEvent.bind(target);
-  }
-
-  handleWindowResize() {
-    if (this.gameState.get('gameStatus') === 0) {
-      this.ui.containers.base.visible = true
-      this.ui.containers.menuMain.visible = true
-      this.ui.containers.menuPause.visible = false
-      this.ui.containers.map.visible = false
-      this.ui.containers.sprites.visible = false
-      this.ui.containers.controls.visible = false
-      this.ui.containers.messages.visible = false
-      this.computeMenuLayout();
-    } else {
-      this.ui.containers.base.visible = false
-      this.ui.containers.menuMain.visible = false
-      this.ui.containers.menuPause.visible = this.gameState.get('gameStatus') === 2;
-      this.ui.containers.map.visible = true
-      this.ui.containers.sprites.visible = true
-      this.ui.containers.controls.visible = true
-      this.ui.containers.messages.visible = true
-      this.computeGameLayout();
-    }
-    this.repositionUiElements();
   }
 
   /**
@@ -338,7 +363,7 @@ export default class RwbUiEngine {
       // Register resize handler.
       if (this.displayOptions.autoResize) {
         window.addEventListener('resize', () => {
-          this.handleWindowResize();
+          this.refreshDisplay();
         });
       }
     });
@@ -346,20 +371,22 @@ export default class RwbUiEngine {
 
   initGameControls() {
     // Draw base board.
-    this.createRectangle('board', { fill: 0x3090ff, container: 'map' });
-    this.createRectangle('controlsArea', { fill: 0x303030, container: 'map' });
+    this.createContainerRectangle('board', { fill: 0x3090ff, container: 'map' });
+    this.createContainerRectangle('controlsArea', { fill: 0x303030, container: 'map' });
 
-    // Init pause menu buttons.
-    for (const btnText of ['Resume', 'Abandon']) {
+    // Init pause menu related buttons.
+    for (const btnText of ['Resume', 'Abandon', 'Pause']) {
       const btn = new PIXI.Sprite(this.textures[`btn-${btnText.toLowerCase()}`]);
-      this.ui.objects[`btn${btnText}`] = btn;
-      this.ui.containers.menuPause.addChild(btn);
+      btn.interactive = true;
+      btn.on('click', () => {
+        this.dispatchEvent(new CustomEvent(btnText.toLowerCase(), {}));
+      });
+      this.ui.objects.menu[`btn${btnText}`] = btn;
     }
-
-    // Pause button.
-    const btnPause = new PIXI.Sprite(this.textures['btn-pause']);
-    this.ui.objects.btnPause = btnPause;
-    this.ui.containers.menuPause.addChild(btnPause);
+    this.ui.containers.menuPause.addChild(this.ui.objects.menu.btnResume);
+    this.ui.containers.menuPause.addChild(this.ui.objects.menu.btnAbandon);
+    // Pause button itself is displayed on main game screen.
+    this.ui.containers.controls.addChild(this.ui.objects.menu.btnPause);
 
     // Dice faces.
     // Two dice, init at 0.
@@ -372,6 +399,7 @@ export default class RwbUiEngine {
       // Two sets, one for each dice.
       for (const direction of ['Up', 'Down', 'Left', 'Right']) {
         const btn = new PIXI.Sprite(this.textures[`btn-${direction.toLowerCase()}`]);
+        btn.interactive = true;
         this.ui.objects[`btnDice${i}${direction}`] = btn;
         this.ui.containers.controls.addChild(btn);
       }
@@ -379,8 +407,8 @@ export default class RwbUiEngine {
   }
 
   initMenu() {
-    this.createRectangle('menuBase', { fill: 0x3090ff });
-    this.createRectangle('menuOptionsArea', { fill: 0x303030 });
+    this.createContainerRectangle('menuBase', { fill: 0x3090ff });
+    this.createContainerRectangle('menuOptionsArea', { fill: 0x303030 });
 
     // Menu title.
     this.createUiMessage('title', { container: 'menuMain', fill: 0xffffff, align: 'center' });
@@ -401,15 +429,15 @@ export default class RwbUiEngine {
 
     // Map difficulty.
     const btnDifficulty = new PIXI.Sprite(this.textures[`difficulty-${this.data.menu.mapDifficulty}`]);
-    this.ui.objects.mapDifficulty = btnDifficulty;
+    this.ui.objects.menu.mapDifficulty = btnDifficulty;
     this.ui.containers.menuMain.addChild(btnDifficulty);
 
     // Add 8 arrow buttons for swapping map difficulty and players 2-4 controller.
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 8; i++) {
       const texture = i % 2 === 0 ? 'btn-left' : 'btn-right';
       const btn = new PIXI.Sprite(this.textures[texture]);
       btn.interactive = true;
-      this.ui.objects.menuMainControls.push(btn);
+      this.ui.objects.menu.controls.push(btn);
       this.ui.containers.menuMain.addChild(btn);
       if (i < 2) {
         btn.on('click', () => {
@@ -422,10 +450,12 @@ export default class RwbUiEngine {
       }
     }
 
+    this.updateMenuPlayerVisibility();
+
     // Start game button.
     const btnStart = new PIXI.Sprite(this.textures['btn-start']);
     btnStart.interactive = true;
-    this.ui.objects.btnStartGame = btnStart;
+    this.ui.objects.menu.btnStartGame = btnStart;
     this.ui.containers.menuMain.addChild(btnStart);
     btnStart.on('click', () => {
       this.dispatchEvent(new CustomEvent('newGame', { detail: this.data.menu }));
@@ -433,34 +463,195 @@ export default class RwbUiEngine {
   }
 
   initUiMessages() {
-    this.createUiMessage('mapInfo');
-    this.createUiMessage('gameTurn');
+    this.createUiMessage('mapDifficulty');
+    this.createUiMessage('mapSeed');
+    this.createUiMessage('gameTurn', { align: 'center' });
     this.createUiMessage('playerTurn', { align: 'center' });
     this.createUiMessage('gameScore', { align: 'right' });
     this.createUiMessage('hiScore', { align: 'right' });
   }
 
-  renderLoop() {
-    // each frame we spin the bunny around a bit
-    // bunny.rotation -= 0.01;
+  nextTurn() {
+    const currentActivePlayer = this.gameState.get('currentActivePlayer');
+    const currentTurn = this.gameState.get('currentTurn');
 
-    if (Object.prototype.hasOwnProperty.call(this.ui.objects.messages, 'playerTurn')) {
-      if (this.ui.objects.messages.playerTurn.y > this.displayOptions.infoTextSize) {
-        this.ui.objects.messages.playerTurn.y -= Math.ceil(this.displayOptions.board.heightWithMargin / 400);
-        if (this.ui.objects.messages.playerTurn.y < 1.2 * this.displayOptions.infoTextSize) {
-          this.updateUiMessage('playerTurn', {
-            fontSize: this.displayOptions.infoTextSize,
-            x: this.displayOptions.board.widthWithMargin / 2,
-            y: this.displayOptions.infoTextSize,
-          });
+    this.updateUiMessage('gameTurn', { text: `Turn: ${currentTurn}` });
+    this.updateUiMessage('gameScore', { text: `Score: ${this.gameState.get('currentScore')}` });
+
+    const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
+    this.updateUiMessage('playerTurn', {
+      text: `${playerName}'s turn.`,
+      fill: this.gameState.get('gameOptions.playerColors')[currentActivePlayer],
+      fontSize: 1.2 * this.displayOptions.gridSizePx,
+      x: this.displayOptions.game.mx + this.displayOptions.board.widthWP / 2,
+      y: this.displayOptions.game.my + this.displayOptions.board.heightWP / 2,
+    });
+    this.addTransition('messages.playerTurn', {
+      translate: { y: this.displayOptions.game.my + 4 * this.displayOptions.infoTextSize },
+      cb: () => {
+        this.updateUiMessage('playerTurn', {
+          x: this.displayOptions.game.mx + this.displayOptions.board.widthWP / 2,
+          y: this.displayOptions.game.my + 2.5 * this.displayOptions.infoTextSize,
+          fontSize: this.displayOptions.infoTextSize,
+        });
+      },
+    });
+  }
+
+  refreshDisplay() {
+    this.ui.containers.base.visible = false;
+    this.ui.containers.menuMain.visible = false;
+    this.ui.containers.menuPause.visible = false;
+    this.ui.containers.map.visible = false;
+    this.ui.containers.sprites.visible = false;
+    this.ui.containers.controls.visible = false;
+    this.ui.containers.messages.visible = false;
+    this.computeMenuLayout();
+    if (this.gameState.get('gameStatus') === 0) {
+      // In menu.
+      this.ui.containers.base.visible = true;
+      this.ui.containers.menuMain.visible = true;
+    } else if (this.gameState.get('gameStatus') === 2) {
+      // Paused game.
+      this.ui.containers.base.visible = true;
+      this.ui.containers.menuPause.visible = true;
+      this.computeGameLayout();
+    } else {
+      // Active/finished game.
+      this.ui.containers.map.visible = true;
+      this.ui.containers.sprites.visible = true;
+      this.ui.containers.controls.visible = true;
+      this.ui.containers.messages.visible = true;
+      this.computeGameLayout();
+    }
+    this.repositionUi();
+  }
+
+  renderLoop() {
+    // Animation logic.
+    // Currently only supports basic linear translate/scale/rotate.
+    for (const [element, tData] of Object.entries(this.ui.transition)) {
+      const tObj = deepGet(this.ui.objects, tData.element);
+      tData.step += 1;
+      tData.stepProgress = 1 / tData.steps;
+      tData.progress = Math.min(1, tData.step / tData.steps);
+
+      // Handle translate and scale.
+      for (const [key, attrs] of Object.entries({ translate: ['x', 'y'], scale: ['width', 'height'] })) {
+        const tDataProp = tData[key];
+        if (tDataProp !== null) {
+          for (const attr of attrs) {
+            if (Object.prototype.hasOwnProperty.call(tDataProp, attr)) {
+              tObj[attr] = tDataProp.from[attr] + tData.progress * (tDataProp[attr] - tDataProp.from[attr]);
+            }
+          }
+        }
+      }
+
+      // Handle rotate
+      if (tData.rotate !== null) {
+        const stepRotate = tData.stepProgress * tData.rotate;
+        tObj.rotation += stepRotate;
+      }
+
+      // Done
+      if (tData.step >= tData.steps) {
+        delete this.ui.transition[element];
+        // Optional callback on done.
+        if (typeof (tData.cb) === 'function') {
+          tData.cb();
         }
       }
     }
   }
 
+  repositionGameControls() {
+    // Update pause menu.
+    for (const btnText of ['Resume', 'Abandon']) {
+      this.ui.objects.menu[`btn${btnText}`].width = 32 * this.displayOptions.du;
+      this.ui.objects.menu[`btn${btnText}`].height = 10 * this.displayOptions.du;
+    }
+    this.ui.objects.menu.btnResume.position.set(this.displayOptions.width / 2, 40 * this.displayOptions.du);
+    this.ui.objects.menu.btnAbandon.position.set(this.displayOptions.width / 2, 60 * this.displayOptions.du);
+
+    // Update controls area.
+    this.ui.objects.map.controlsArea.position.set(
+      this.displayOptions.controls.x,
+      this.displayOptions.controls.y,
+    );
+    this.ui.objects.map.controlsArea.width = this.displayOptions.controls.width;
+    this.ui.objects.map.controlsArea.height = this.displayOptions.controls.height;
+
+    // Pause button.
+    this.ui.objects.menu.btnPause.width = 15 * this.displayOptions.controls.du;
+    this.ui.objects.menu.btnPause.height = 15 * this.displayOptions.controls.du;
+    this.ui.objects.menu.btnPause.position.set(
+      this.displayOptions.controls.x + this.displayOptions.controls.width - 10 * this.displayOptions.controls.du,
+      this.displayOptions.controls.y + 10 * this.displayOptions.controls.du,
+    );
+
+    // Dice faces.
+    const baselineX = this.displayOptions.game.mx
+      + this.displayOptions.board.widthWP + 50 * this.displayOptions.controls.du;
+    const baselineY = this.displayOptions.game.my
+      + this.displayOptions.board.heightWP + 50 * this.displayOptions.controls.du;
+    const diceFacePos = [
+      [baselineX, baselineY],
+      [baselineX, baselineY],
+    ];
+    if (this.displayOptions.displayMode === 'landscape') {
+      // Landscape.
+      diceFacePos[0][1] = 0.27 * this.displayOptions.controls.height;
+      diceFacePos[1][1] = 0.73 * this.displayOptions.controls.height;
+    } else {
+      // Portrait.
+      diceFacePos[0][0] = 0.27 * this.displayOptions.controls.width;
+      diceFacePos[1][0] = 0.73 * this.displayOptions.controls.width;
+    }
+    // Two dice, init at 0.
+    for (let i = 0; i < 2; i++) {
+      this.ui.objects.diceFaces[i].width = 25 * this.displayOptions.controls.du;
+      this.ui.objects.diceFaces[i].height = 25 * this.displayOptions.controls.du;
+      this.ui.objects.diceFaces[i].position.set(diceFacePos[i][0], diceFacePos[i][1]);
+
+      // Dice controls.
+      for (const val of Object.values([
+        ['Up', 0, -1],
+        ['Down', 0, 1],
+        ['Left', -1, 0],
+        ['Right', 1, 0],
+      ])) {
+        const btn = this.ui.objects[`btnDice${i}${val[0]}`];
+        btn.width = 12 * this.displayOptions.controls.du;
+        btn.height = 12 * this.displayOptions.controls.du;
+        btn.position.set(
+          diceFacePos[i][0] + 25 * val[1] * this.displayOptions.controls.du,
+          diceFacePos[i][1] + 25 * val[2] * this.displayOptions.controls.du,
+        );
+      }
+    }
+  }
+
+  repositionGameMessages() {
+    // Update game status messages at top.
+    const left = this.displayOptions.game.mx + 2.5 * this.displayOptions.infoTextSize;
+    const center = this.displayOptions.game.mx + this.displayOptions.board.widthWP / 2;
+    const right = this.displayOptions.game.mx + this.displayOptions.board.widthWP - this.displayOptions.infoTextSize;
+    const row1 = this.displayOptions.game.my + this.displayOptions.infoTextSize;
+    const row2 = this.displayOptions.game.my + 2.5 * this.displayOptions.infoTextSize;
+    this.updateUiMessage('mapDifficulty', { x: left, y: row1, fontSize: this.displayOptions.infoTextSize });
+    this.updateUiMessage('mapSeed', { x: left, y: row2, fontSize: this.displayOptions.infoTextSize });
+    this.updateUiMessage('gameTurn', { x: center, y: row1, fontSize: this.displayOptions.infoTextSize });
+    this.updateUiMessage('playerTurn', { x: center, y: row2, fontSize: this.displayOptions.infoTextSize });
+    this.updateUiMessage('gameScore', { x: right, y: row1, fontSize: this.displayOptions.infoTextSize });
+    this.updateUiMessage('hiScore', { x: right, y: row2, fontSize: this.displayOptions.infoTextSize });
+  }
+
   repositionMapTiles() {
-    const marginX = Math.floor(this.displayOptions.board.marginLeft + 0.5 * this.displayOptions.gridSizePx);
-    const marginY = Math.floor(this.displayOptions.board.marginTop + 0.5 * this.displayOptions.gridSizePx);
+    const marginX = Math.floor(this.displayOptions.game.mx + this.displayOptions.board.px
+      + 0.5 * this.displayOptions.gridSizePx);
+    const marginY = Math.floor(this.displayOptions.game.my + this.displayOptions.board.pt
+      + 0.5 * this.displayOptions.gridSizePx);
 
     // Note PIXI sprites are anchored at center middle.
     const iMax = Math.min(this.displayOptions.gridCountX, this.ui.objects.tiles.length);
@@ -477,39 +668,39 @@ export default class RwbUiEngine {
   }
 
   repositionMenu() {
-    const { marginTop } = this.displayOptions.startScreen;
-    this.ui.objects.menuBase.width = this.displayOptions.startScreen.width;
-    this.ui.objects.menuBase.height = this.displayOptions.startScreen.height;
-    this.ui.objects.menuOptionsArea.width = this.displayOptions.startScreen.width;
-    this.ui.objects.menuOptionsArea.height = 8.125 * this.displayOptions.titleFontSize;
-    this.ui.objects.menuOptionsArea.y = marginTop + 2.25 * this.displayOptions.titleFontSize;
+    const { my } = this.displayOptions.startScreen;
+    this.ui.objects.base.menuBase.width = this.displayOptions.startScreen.width;
+    this.ui.objects.base.menuBase.height = this.displayOptions.startScreen.height;
+    this.ui.objects.base.menuOptionsArea.width = this.displayOptions.startScreen.width;
+    this.ui.objects.base.menuOptionsArea.height = 8.125 * this.displayOptions.titleFontSize;
+    this.ui.objects.base.menuOptionsArea.y = my + 2.25 * this.displayOptions.titleFontSize;
 
     this.updateUiMessage('title', {
       text: 'Robot Wants Battery',
       fontSize: this.displayOptions.titleFontSize,
       x: this.displayOptions.startScreen.width / 2,
-      y: marginTop + this.displayOptions.titleFontSize,
+      y: my + this.displayOptions.titleFontSize,
     });
 
     this.updateUiMessage('menuDifficulty', {
       text: 'Map Difficulty',
       fontSize: this.displayOptions.menuFontSize,
       x: this.displayOptions.startScreen.width / 2,
-      y: marginTop + 3 * this.displayOptions.titleFontSize,
+      y: my + 3 * this.displayOptions.titleFontSize,
     });
 
-    this.ui.objects.mapDifficulty.width = 1.5 * this.displayOptions.titleFontSize;
-    this.ui.objects.mapDifficulty.height = 1.5 * this.displayOptions.titleFontSize;
-    this.ui.objects.mapDifficulty.position.set(
+    this.ui.objects.menu.mapDifficulty.width = 1.5 * this.displayOptions.titleFontSize;
+    this.ui.objects.menu.mapDifficulty.height = 1.5 * this.displayOptions.titleFontSize;
+    this.ui.objects.menu.mapDifficulty.position.set(
       this.displayOptions.startScreen.width / 2,
-      marginTop + 4.5 * this.displayOptions.titleFontSize,
+      my + 4.5 * this.displayOptions.titleFontSize,
     );
 
     this.updateUiMessage('menuPlayers', {
       text: 'Players',
       fontSize: this.displayOptions.menuFontSize,
       x: this.displayOptions.startScreen.width / 2,
-      y: marginTop + 7 * this.displayOptions.titleFontSize,
+      y: my + 7 * this.displayOptions.titleFontSize,
     });
 
     for (let i = 0; i < this.displayOptions.maxPlayersCount; i++) {
@@ -517,40 +708,44 @@ export default class RwbUiEngine {
       this.ui.objects.controllerFaces[i].height = 1.5 * this.displayOptions.titleFontSize;
       this.ui.objects.controllerFaces[i].position.set(
         (i + 1) / 5 * this.displayOptions.startScreen.width,
-        marginTop + 8.5 * this.displayOptions.titleFontSize,
+        my + 8.5 * this.displayOptions.titleFontSize,
       );
     }
 
     // Difficulty and player buttons.
     for (let i = 0; i < 8; i++) {
-      this.ui.objects.menuMainControls[i].width = 0.5 * this.displayOptions.titleFontSize;
-      this.ui.objects.menuMainControls[i].height = 0.5 * this.displayOptions.titleFontSize;
+      this.ui.objects.menu.controls[i].width = 0.5 * this.displayOptions.titleFontSize;
+      this.ui.objects.menu.controls[i].height = 0.5 * this.displayOptions.titleFontSize;
       let x;
       let y;
       const xAdjustment = (i % 2 === 0 ? -1 : 1) * 0.45 * this.displayOptions.titleFontSize;
       if (i < 2) {
         // Difficulty buttons.
         x = this.displayOptions.startScreen.width / 2 + xAdjustment;
-        y = marginTop + 5.75 * this.displayOptions.titleFontSize;
+        y = my + 5.75 * this.displayOptions.titleFontSize;
       } else {
         // Player buttons.
         x = Math.floor(i / 2 + 1) / 5 * this.displayOptions.startScreen.width + xAdjustment;
-        y = marginTop + 9.75 * this.displayOptions.titleFontSize;
+        y = my + 9.75 * this.displayOptions.titleFontSize;
       }
-      this.ui.objects.menuMainControls[i].position.set(x, y);
+      this.ui.objects.menu.controls[i].position.set(x, y);
     }
 
-    this.ui.objects.btnStartGame.width = 3.5 * this.displayOptions.titleFontSize;
-    this.ui.objects.btnStartGame.height = 3.5 * this.displayOptions.titleFontSize / 3.2;
-    this.ui.objects.btnStartGame.position.set(
+    this.ui.objects.menu.btnStartGame.width = 3.5 * this.displayOptions.titleFontSize;
+    this.ui.objects.menu.btnStartGame.height = 3.5 * this.displayOptions.titleFontSize / 3.2;
+    this.ui.objects.menu.btnStartGame.position.set(
       this.displayOptions.startScreen.width / 2,
-      marginTop + 11.5 * this.displayOptions.titleFontSize,
+      my + 11.5 * this.displayOptions.titleFontSize,
     );
   }
 
   repositionPlayerPieces() {
-    const marginX = Math.floor(this.displayOptions.board.marginLeft + 0.5 * this.displayOptions.gridSizePx);
-    const marginY = Math.floor(this.displayOptions.board.marginTop + 0.5 * this.displayOptions.gridSizePx);
+    const marginX = Math.floor(
+      this.displayOptions.game.mx + this.displayOptions.board.px + 0.5 * this.displayOptions.gridSizePx,
+    );
+    const marginY = Math.floor(
+      this.displayOptions.game.my + this.displayOptions.board.pt + 0.5 * this.displayOptions.gridSizePx,
+    );
     const halfGridSizePx = this.displayOptions.gridSizePx / 2;
 
     const playersCount = Math.min(this.gameState.get('playersCount'), this.ui.objects.playerPieces.length);
@@ -576,47 +771,25 @@ export default class RwbUiEngine {
     }
   }
 
-  repositionGameControls() {
-    this.ui.objects.controlsArea.position.set(
-      this.displayOptions.controls.marginLeft,
-      this.displayOptions.controls.marginTop,
-    );
-    this.ui.objects.controlsArea.width = this.displayOptions.controls.width;
-    this.ui.objects.controlsArea.height = this.displayOptions.controls.height;
-  }
-
-  repositionUiMessages() {
-    // Update game status messages at top.
-    const left = 2.5 * this.displayOptions.infoTextSize;
-    const center = 2.5 * this.displayOptions.board.widthWithMargin / 2;
-    const right = this.displayOptions.board.widthWithMargin - this.displayOptions.infoTextSize;
-    const row1 = this.displayOptions.infoTextSize;
-    const row2 = 2.5 * this.displayOptions.infoTextSize;
-    this.updateUiMessage('mapInfo', { x: left, y: row1, fontSize: this.displayOptions.infoTextSize });
-    this.updateUiMessage('gameTurn', { x: left, y: row2, fontSize: this.displayOptions.infoTextSize });
-    this.updateUiMessage('playerTurn', { x: center, y: row1, fontSize: this.displayOptions.infoTextSize });
-    this.updateUiMessage('gameScore', { x: right, y: row1, fontSize: this.displayOptions.infoTextSize });
-    this.updateUiMessage('hiScore', { x: right, y: row2, fontSize: this.displayOptions.infoTextSize });
-  }
-
-  repositionUiElements() {
+  repositionUi() {
     // Resize engine area.
     this.renderer.renderer.resize(
       this.displayOptions.width, this.displayOptions.height,
     );
 
     // Resize game board.
-    this.ui.objects.board.width = this.displayOptions.board.widthWithMargin;
-    this.ui.objects.board.height = this.displayOptions.board.heightWithMargin;
+    this.ui.objects.map.board.x = this.displayOptions.game.mx;
+    this.ui.objects.map.board.y = this.displayOptions.game.my;
+    this.ui.objects.map.board.width = this.displayOptions.board.widthWP;
+    this.ui.objects.map.board.height = this.displayOptions.board.heightWP;
 
-    if (this.gameState.get('gameStatus') === 0) {
-      // Outside of game.
-      // Reposition menu.
-      this.repositionMenu();
-    } else {
-      // In-game.
+    // Always reposition menu.
+    this.repositionMenu();
+
+    // In-game.
+    if (this.gameState.get('gameStatus') > 0) {
       // Reposition various messages.
-      this.repositionUiMessages();
+      this.repositionGameMessages();
 
       // Reposition map tiles.
       this.repositionMapTiles();
@@ -632,7 +805,7 @@ export default class RwbUiEngine {
   togglePlayer(index, isPrevious = false) {
     // If previous index is empty, then player cannot be toggled.
     if (this.data.menu.playerController[index - 1] === 0) {
-      return
+      return;
     }
     let newController = this.data.menu.playerController[index] + (isPrevious ? -1 : 1);
     if (newController < 0) {
@@ -643,13 +816,8 @@ export default class RwbUiEngine {
     }
     this.data.menu.playerController[index] = newController;
     this.ui.objects.controllerFaces[index].texture = this.textures[`face-${newController}`];
-    // If current index is now empty, toggle all players after current player to become empty.
-    if (newController === 0) {
-      for (let i = index + 1; i < 4; i++) {
-        this.data.menu.playerController[i] = 0;
-        this.ui.objects.controllerFaces[i].texture = this.textures[`face-0`];
-      }
-    }
+
+    this.updateMenuPlayerVisibility();
   }
 
   toggleMapDifficulty(isPrevious = false) {
@@ -661,7 +829,31 @@ export default class RwbUiEngine {
       newDifficulty = 0;
     }
     this.data.menu.mapDifficulty = newDifficulty;
-    this.ui.objects.mapDifficulty.texture = this.textures[`difficulty-${newDifficulty}`];
+    this.ui.objects.menu.mapDifficulty.texture = this.textures[`difficulty-${newDifficulty}`];
+  }
+
+  updateMenuPlayerVisibility() {
+    // Hide faces and arrows of all None players but the first.
+    let indexFirstNone = this.displayOptions.maxPlayersCount;
+    for (let i = 1; i < this.displayOptions.maxPlayersCount; i++) {
+      const controller = this.data.menu.playerController[i];
+      let visible = true;
+      if (controller === 0) {
+        if (i <= indexFirstNone) {
+          indexFirstNone = i;
+          // Also assign all future controllers to 0.
+          for (let j = i + 1; j < this.displayOptions.maxPlayersCount; j++) {
+            this.data.menu.playerController[j] = 0;
+            this.ui.objects.controllerFaces[j].texture = this.textures['face-0'];
+          }
+        } else {
+          visible = false;
+        }
+      }
+      this.ui.objects.controllerFaces[i].visible = visible;
+      this.ui.objects.menu.controls[i * 2].visible = visible;
+      this.ui.objects.menu.controls[i * 2 + 1].visible = visible;
+    }
   }
 
   updateUiMessage(name, options) {

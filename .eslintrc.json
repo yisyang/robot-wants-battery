@@ -11,6 +11,7 @@
         "sourceType": "module"
     },
     "rules": {
+      "array-callback-return": ["off"],
       "import/extensions": ["off"],
       "no-console": ["off"],
       "no-mixed-operators": ["off"],

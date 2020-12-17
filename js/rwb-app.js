@@ -15,12 +15,11 @@ export default class RwbApp {
       playerLocations: [],
       maxScore: 100,
       controllersAllowed: [0, 1, 2, 3],
-      controllerLabels: ['None', 'Human', 'AI (Easy)', 'AI (Hard)'],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
       waterTileChances: [0.05, 0.15, 0.25, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
     };
-    this.gameOptions = Object.assign(this.gameOptions, gameOptions);
+    Object.assign(this.gameOptions, gameOptions);
 
     // Populate computed options.
     if (this.gameOptions.gridCountY === null) {
@@ -59,8 +58,20 @@ export default class RwbApp {
       this.uiEngine.addEventListener('newGame', (e) => {
         this.newGame(e.detail);
       });
+      this.uiEngine.addEventListener('pause', () => {
+        this.gameState.set('gameStatus', 2);
+        this.uiEngine.refreshDisplay();
+      });
+      this.uiEngine.addEventListener('resume', () => {
+        this.gameState.set('gameStatus', 1);
+        this.uiEngine.refreshDisplay();
+      });
+      this.uiEngine.addEventListener('abandon', () => {
+        this.gameState.set('gameStatus', 0);
+        this.uiEngine.refreshDisplay();
+      });
       // Trigger it manually for initial rendering.
-      this.uiEngine.handleWindowResize();
+      this.uiEngine.refreshDisplay();
       console.log('UI engine initialized complete.');
     }).catch((e) => {
       console.log('Failed to initialize UI.');
@@ -106,30 +117,34 @@ export default class RwbApp {
     this.createPlayerPieces();
 
     // Update UI.
-    this.uiEngine.updateUiMessage('mapInfo', { text: `Map Seed: ${seedPhrase}` });
+    const difficultyLabel = this.gameState.get('gameOptions.difficultyLabels')[this.gameState.get('mapDifficulty')];
+    this.uiEngine.clearGameMap();
+    this.uiEngine.updateUiMessage('mapDifficulty', { text: `Difficulty: ${difficultyLabel}` });
+    this.uiEngine.updateUiMessage('mapSeed', { text: `Map Seed: ${seedPhrase}` });
     this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
     this.uiEngine.createGameTiles(this.gameState.get('mapTiles'));
     this.uiEngine.createPlayerPieces(this.gameState.get('playersCount'));
   }
 
   newGame(options) {
-    this.gameState.set('mapDifficulty', options.mapDifficulty)
-    this.gameState.set('players[1].controller', options.playerController[1])
-    this.gameState.set('players[2].controller', options.playerController[2])
-    this.gameState.set('players[3].controller', options.playerController[3])
+    this.gameState.reset();
+    this.gameState.set('mapDifficulty', options.mapDifficulty);
+    this.gameState.set('players[1].controller', options.playerController[1]);
+    this.gameState.set('players[2].controller', options.playerController[2]);
+    this.gameState.set('players[3].controller', options.playerController[3]);
     if (options.playerController[3] !== 0) {
-      this.gameState.set('playersCount', 4)
+      this.gameState.set('playersCount', 4);
     } else if (options.playerController[2] !== 0) {
-      this.gameState.set('playersCount', 3)
+      this.gameState.set('playersCount', 3);
     } else if (options.playerController[1] !== 0) {
-      this.gameState.set('playersCount', 2)
+      this.gameState.set('playersCount', 2);
     } else {
-      this.gameState.set('playersCount', 1)
+      this.gameState.set('playersCount', 1);
     }
     this.gameState.savePersistedState();
-    this.gameState.set('gameStatus', 1)
+    this.gameState.set('gameStatus', 1);
     this.generateBoard();
-    this.uiEngine.handleWindowResize();
+    this.uiEngine.refreshDisplay();
     this.nextTurn();
   }
 
@@ -147,23 +162,6 @@ export default class RwbApp {
     }
     this.gameState.set('currentActivePlayer', currentActivePlayer);
 
-    const difficultyLabel = this.gameOptions.difficultyLabels[this.gameState.get('mapDifficulty')];
-
-    this.uiEngine.updateUiMessage('gameTurn', { text: `(${difficultyLabel}) Turn: ${currentTurn}` });
-    this.uiEngine.updateUiMessage('gameScore', { text: `Score: ${this.gameState.get('currentScore')}` });
-
-    const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
-    this.uiEngine.updateUiMessage('playerTurn', {
-      text: `${playerName}'s turn.`,
-      fill: this.gameOptions.playerColors[currentActivePlayer],
-      fontSize: 1.2 * this.uiEngine.displayOptions.gridSizePx,
-      x: this.uiEngine.displayOptions.board.widthWithMargin / 2,
-      y: this.uiEngine.displayOptions.board.heightWithMargin / 2,
-    });
-  }
-
-  reset() {
-    this.uiEngine.clearStage();
-    this.uiEngine.clearUiMessages();
+    this.uiEngine.nextTurn();
   }
 }
