@@ -19,6 +19,9 @@ export default class RwbUiEngine {
 
     this.gameState = gameState;
 
+    // Create alias for Pixi sounds.
+    this.sounds = {};
+
     // Create alias for Pixi textures.
     this.textures = null;
 
@@ -189,13 +192,16 @@ export default class RwbUiEngine {
 
     return new Promise((resolve, reject) => {
       try {
-        this.renderer.loader.add('rwb', './img/sprites.json').load((loader, resources) => {
+        // Load textures
+        new PIXI.Loader().add('rwb', './img/sprites.json').load((loader, resources) => {
           resolve(resources);
         });
       } catch (e) {
         reject(e);
       }
     }).then((resources) => {
+      console.log('Sprites loaded.');
+
       // noinspection JSUnresolvedVariable
       this.textures = resources.rwb.textures;
 
@@ -204,6 +210,28 @@ export default class RwbUiEngine {
         this.ui.containers[container] = new PIXI.Container();
         this.renderer.stage.addChild(this.ui.containers[container]);
       }
+
+      // Load sounds
+      // const tempLoader = new PIXI.Loader();
+      ['die', 'frightened', 'ka', 'start', 'wa'].forEach((sound) => {
+        this.renderer.loader.add(sound, `./sounds/${sound}.mp3`);
+      });
+      return new Promise((resolve, reject) => {
+        try {
+          this.renderer.loader.load((loader, resources) => {
+            resolve(resources);
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }).then((resources) => {
+      console.log('Sounds loaded.');
+      this.sounds = resources;
+      return true;
+    }).then(() => {
+      // Done loading.
+      console.log('Initializing app.');
 
       // Init menu.
       this.modules.menu.init();
@@ -223,6 +251,12 @@ export default class RwbUiEngine {
         });
       }
     });
+  }
+
+  playSound(name) {
+    if (!this.options.muted) {
+      this.sounds[name].data.play();
+    }
   }
 
   refreshDisplay() {

@@ -13,6 +13,7 @@ export default class RwbApp {
       gridCountX: 16,
       gridCountY: null,
       maxScore: 100,
+      muted: false,
       controllersAllowed: [0, 1],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
       waterTileChances: [0.05, 0.15, 0.25, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
@@ -47,6 +48,7 @@ export default class RwbApp {
       height: this.gameOptions.displayOptions.height,
       gridCountX: this.gameOptions.gridCountX,
       gridCountY: this.gameOptions.gridCountY,
+      muted: this.gameOptions.muted,
     });
   }
 
@@ -150,6 +152,7 @@ export default class RwbApp {
     this.gameState.set('gameStatus', 1);
     this.generateBoard();
     this.uiEngine.modules.game.startGame();
+    this.uiEngine.playSound('start');
     this.uiEngine.refreshDisplay();
     this.nextTurn();
   }

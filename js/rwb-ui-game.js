@@ -187,9 +187,8 @@ export default class RwbUiGame {
     Object.entries({
       menuPause: ['Resume', 'Abandon'],
       controls: ['Pause', 'Cancel', 'Confirm'],
-    }).forEach((e) => {
-      const key = e[0];
-      e[1].forEach((btnText) => {
+    }).forEach(([key, btnTexts]) => {
+      btnTexts.forEach((btnText) => {
         const btn = new PIXI.Sprite(this.engine.textures[`btn-${btnText.toLowerCase()}`]);
         btn.interactive = true;
         btn.on('click', () => {
