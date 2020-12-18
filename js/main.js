@@ -16,8 +16,8 @@ function createButton(text, width, height, margin = 0) {
 function startGame(muted = false) {
   document.getElementById('pregame-buttons').remove();
   const rwb = new RwbApp('game-holder', {
-    gridCountX: 16,
-    gridCountY: 16,
+    gridCountX: 20,
+    gridCountY: 20,
     muted,
   });
   rwb.init().catch((e) => {
@@ -45,6 +45,10 @@ window.onload = () => {
   const divOverlay = document.createElement('div');
   divOverlay.style.padding = '80px';
   divOverlay.style.backgroundColor = 'rgba(48, 48, 48, 0.95)';
+  divOverlay.style.textAlign = 'center';
+  divOverlay.style.color = '#ffffff';
+  divOverlay.style.fontSize = '24px';
+  divOverlay.innerText = 'Playable but work in progress.';
 
   // Stack elements.
   divHolder.appendChild(divOverlay);

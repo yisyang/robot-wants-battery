@@ -63,7 +63,7 @@ export default class RwbUiGame {
 
     // Reset local starting position data.
     const currentActivePlayer = this.gameState.get('currentActivePlayer');
-    const { x, y } = this.gameState.get(`playerLocations[${currentActivePlayer}]`);
+    const { x, y } = this.gameState.get(`players[${currentActivePlayer}]`);
     this.data.movement.start = [x, y];
   }
 
@@ -90,7 +90,7 @@ export default class RwbUiGame {
     // Reserve 33% width or height for other UI controls.
     const gridSizePxAfterReserveMax = Math.floor(Math.max(gridSizePxX, gridSizePxY) / 1.33);
     const gridSizePx = Math.min(gridSizePxBeforeReserveMin, gridSizePxAfterReserveMax);
-    if (gridSizePx < 20) {
+    if (gridSizePx < 12) {
       throw Error('Error: Grid size too small to be playable! Please increase grid width/height.');
     }
     return gridSizePx;
@@ -146,6 +146,70 @@ export default class RwbUiGame {
     this.options.infoTextSize = Math.floor(
       0.035 * this.engine.options.gridCountY * this.options.gridSizePx,
     );
+  }
+
+  computePlannedMovementData(moveIndex, options) {
+    let diceValue = this.gameState.get(`diceValue[${options.dice}]`);
+
+    // Determine starting location.
+    let startingLocation;
+    let flying = false;
+    if (moveIndex === 0) {
+      startingLocation = this.data.movement.start;
+    } else if (options.direction === this.data.movement.moves[0].direction) {
+      // Continued move (fly).
+      startingLocation = this.data.movement.start;
+      diceValue += this.gameState.get(`diceValue[${1 - options.dice}]`);
+      flying = true;
+    } else {
+      startingLocation = this.data.movement.moves[0].target;
+    }
+
+    // Convert movement into x/y increment.
+    const axis = (options.direction === 'Left' || options.direction === 'Right') ? 0 : 1;
+    const increment = (options.direction === 'Down' || options.direction === 'Right') ? 1 : -1;
+
+    // Check if movement is legal.
+    const mapTilesData = this.gameState.get('mapTiles');
+    let drowned = false;
+    let oob = false;
+    let [i, j] = startingLocation;
+    const tilesCrossed = [[i, j]];
+    for (let step = 1; step <= diceValue; step++) {
+      if (axis === 0) {
+        i += increment;
+      } else {
+        j += increment;
+      }
+      if (i < 0 || j < 0 || i >= this.engine.options.gridCountX || j >= this.engine.options.gridCountY) {
+        // Illegal move outside of map.
+        oob = true;
+        break;
+      }
+      if (mapTilesData[i][j].type === 'water') {
+        if (!flying || step === diceValue) {
+          // Walked into water OR flying but landed in water.
+          drowned = true;
+        }
+      }
+      tilesCrossed.push([i, j]);
+    }
+
+    // Save local movement data.
+    this.data.movement.moves[moveIndex] = {
+      alive: !(oob || drowned),
+      diceIndex: oob ? -1 : options.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
+      direction: options.direction,
+      flying,
+      tilesCrossed,
+      target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
+    };
+  }
+
+  countPlayersAtPlayerLocation(i) {
+    const playersData = this.gameState.get('players');
+    const { x, y } = playersData[i];
+    return playersData.map((e) => ((e.x === x && e.y === y) ? 1 : 0)).reduce((a, b) => a + b);
   }
 
   /**
@@ -215,16 +279,16 @@ export default class RwbUiGame {
     }
   }
 
-  drawMovementPreviews(moveIndex) {
-    // Redraw movement previews.
+  drawMovementPreviews() {
+    // Start by clearing the existing previews.
     this.clearMovementPreviews(0);
-    if (!this.data.movement.moves[moveIndex].flying) {
-      // Either moveIndex is 0
-      // OR moveIndex is 1 and is NOT flying.
+    this.clearMovementPreviews(1);
+    // Redraw movement 0 if available and if we are not flying.
+    if (this.data.movement.moves[0].direction !== null && !this.data.movement.moves[1].flying) {
       this.drawMovementPreview(0);
     }
-    if (moveIndex === 1) {
-      this.clearMovementPreviews(1);
+    // Always draw movement 1 if direction is available.
+    if (this.data.movement.moves[1].direction !== null) {
       this.drawMovementPreview(1);
     }
   }
@@ -243,6 +307,18 @@ export default class RwbUiGame {
   init() {
     this.initGameControls();
     this.initUiMessages();
+
+    // Initialize local movement data for rendering.
+    [0, 1].forEach((key) => {
+      this.data.movement.moves[key] = {
+        alive: false,
+        diceIndex: null,
+        direction: null,
+        flying: false,
+        tilesCrossed: [],
+        target: [],
+      };
+    });
 
     this.engine.addEventListener('planMove', (e) => {
       // Start planning.
@@ -323,64 +399,6 @@ export default class RwbUiGame {
     this.engine.createUiMessage('hiScore', { align: 'right' });
   }
 
-  computePlannedMovementData(moveIndex, options) {
-    let diceValue = this.gameState.get(`diceValue[${options.dice}]`);
-
-    // Determine starting location.
-    let startingLocation;
-    let flying = false;
-    if (moveIndex === 0) {
-      startingLocation = this.data.movement.start;
-    } else if (options.direction === this.data.movement.moves[0].direction) {
-      // Continued move (fly).
-      startingLocation = this.data.movement.start;
-      diceValue += this.gameState.get(`diceValue[${1 - options.dice}]`);
-      flying = true;
-    } else {
-      startingLocation = this.data.movement.moves[0].target;
-    }
-
-    // Convert movement into x/y increment.
-    const axis = (options.direction === 'Left' || options.direction === 'Right') ? 0 : 1;
-    const increment = (options.direction === 'Down' || options.direction === 'Right') ? 1 : -1;
-
-    // Check if movement is legal.
-    const mapTilesData = this.gameState.get('mapTiles');
-    let drowned = false;
-    let oob = false;
-    let [i, j] = startingLocation;
-    const tilesCrossed = [[i, j]];
-    for (let step = 1; step <= diceValue; step++) {
-      if (axis === 0) {
-        i += increment;
-      } else {
-        j += increment;
-      }
-      if (i < 0 || j < 0 || i > this.engine.options.gridCountX + 1 || j > this.engine.options.gridCountY + 1) {
-        // Illegal move outside of map.
-        oob = true;
-        break;
-      }
-      if (mapTilesData[i][j].type === 'water') {
-        if (!flying || step === diceValue) {
-          // Walked into water OR flying but landed in water.
-          drowned = true;
-        }
-      }
-      tilesCrossed.push([i, j]);
-    }
-
-    // Save local movement data.
-    this.data.movement.moves[moveIndex] = {
-      alive: !(oob || drowned),
-      diceIndex: oob ? -1 : options.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
-      direction: options.direction,
-      flying,
-      tilesCrossed,
-      target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
-    };
-  }
-
   planMove(options) {
     if (this.gameState.get(`diceValue[${options.dice}]`) === 0) {
       return;
@@ -409,16 +427,29 @@ export default class RwbUiGame {
     }
 
     this.computePlannedMovementData(moveIndex, options);
-    this.drawMovementPreviews(moveIndex);
+    this.drawMovementPreviews();
   }
 
   moveRobot() {
+    if (this.data.movement.moves[1].direction === null) {
+      return;
+    }
+
     // TODO: Move player piece slowly, 1 square at a time, and check for death.
     // Rotate on death.
     // dispatch playerLost on death
     // dispatch diceMoved on move end
     // dispatch playerMoved on both dice moved
     // this.uiEngine.modules.game.moveRobotStep()
+
+    // If player is alive, update player position to target position.
+    const [x, y] = this.data.movement.moves[1].target;
+    this.engine.dispatchEvent(new CustomEvent('turnEnded', {
+      detail: {
+        location: { x, y },
+        alive: this.data.movement.moves[1].alive,
+      },
+    }));
   }
 
   nextTurn() {
@@ -447,6 +478,7 @@ export default class RwbUiGame {
       },
     });
 
+    this.repositionPlayerPieces();
     this.clearMovement();
     this.options.canMove = false;
     this.engine.ui.objects.controls.btnCancel.alpha = 0.3;
@@ -487,6 +519,9 @@ export default class RwbUiGame {
 
       // Reposition controls.
       this.repositionGameControls();
+
+      // Re-draw
+      this.drawMovementPreviews();
     }
   }
 
@@ -568,18 +603,18 @@ export default class RwbUiGame {
       this.engine.ui.objects.diceFaces[i].position.set(diceFacePos[i][0], diceFacePos[i][1]);
 
       // Dice controls.
-      for (const val of Object.values([
+      for (const [dir, x, y] of Object.values([
         ['Up', 0, -1],
         ['Down', 0, 1],
         ['Left', -1, 0],
         ['Right', 1, 0],
       ])) {
-        const btn = this.engine.ui.objects[`btnDice${i}${val[0]}`];
+        const btn = this.engine.ui.objects[`btnDice${i}${dir}`];
         btn.width = 12 * this.options.controls.du;
         btn.height = 12 * this.options.controls.du;
         btn.position.set(
-          diceFacePos[i][0] + 25 * val[1] * this.options.controls.du,
-          diceFacePos[i][1] + 25 * val[2] * this.options.controls.du,
+          diceFacePos[i][0] + 25 * x * this.options.controls.du,
+          diceFacePos[i][1] + 25 * y * this.options.controls.du,
         );
       }
     });
@@ -637,7 +672,7 @@ export default class RwbUiGame {
       const offsetX = marginX + playerData.x * this.options.gridSizePx;
       const offsetY = marginY + playerData.y * this.options.gridSizePx;
 
-      const cnt = this.gameState.countPlayersAtPlayerLocation(i);
+      const cnt = this.countPlayersAtPlayerLocation(i);
       if (cnt > 1) {
         piece.width = halfGridSizePx;
         piece.height = halfGridSizePx;

@@ -10,13 +10,13 @@ export default class RwbApp {
         width: null,
         height: null,
       },
-      gridCountX: 16,
+      gridCountX: 20,
       gridCountY: null,
       maxScore: 100,
       muted: false,
       controllersAllowed: [0, 1],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
-      waterTileChances: [0.05, 0.15, 0.25, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
+      waterTileChances: [0.05, 0.14, 0.19, 0.25], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
     };
     Object.assign(this.gameOptions, gameOptions);
@@ -29,10 +29,12 @@ export default class RwbApp {
     if (this.gameOptions.gridCountX < 10 || this.gameOptions.gridCountY < 10) {
       throw Error('Error: Grid count too few to be playable! Please increase canvas width/height.');
     }
-    this.gameOptions.startLocation = { x: 3, y: 3 };
+
+    const spacing = Math.floor(this.gameOptions.gridCountX / 4);
+    this.gameOptions.startLocation = { x: spacing - 1, y: spacing - 1 };
     this.gameOptions.endLocation = {
-      x: this.gameOptions.gridCountX - 4,
-      y: this.gameOptions.gridCountY - 4,
+      x: this.gameOptions.gridCountX - spacing,
+      y: this.gameOptions.gridCountY - spacing,
     };
 
     // Game state contains ALL state info for the game in progress,
@@ -76,8 +78,9 @@ export default class RwbApp {
         this.gameState.set('gameStatus', 0);
         this.uiEngine.refreshDisplay();
       });
-      this.uiEngine.addEventListener('moveRobot', (e) => {
-        this.moveRobot(e.detail);
+      this.uiEngine.addEventListener('turnEnded', (e) => {
+        this.updateCurrentPlayerData(e.detail);
+        this.nextTurn();
       });
       // Trigger it manually for initial rendering.
       this.uiEngine.refreshDisplay();
@@ -85,11 +88,10 @@ export default class RwbApp {
     });
   }
 
-  createPlayerPieces() {
+  activatePlayerPieces() {
     for (let i = 0, playersCount = this.gameState.get('playersCount'); i < playersCount; i++) {
       this.gameState.set(`players[${i}].alive`, true);
-      this.gameState.set(`players[${i}].x`, this.gameOptions.startLocation.x);
-      this.gameState.set(`players[${i}].y`, this.gameOptions.startLocation.y);
+      this.gameState.set(`players[${i}].playable`, true);
     }
   }
 
@@ -120,7 +122,7 @@ export default class RwbApp {
     this.gameState.set(`mapTiles.${this.gameOptions.endLocation.x}.${this.gameOptions.endLocation.y}.type`, 'end');
 
     // Place player pieces.
-    this.createPlayerPieces();
+    this.activatePlayerPieces();
   }
 
   newGame(options = null) {
@@ -143,11 +145,14 @@ export default class RwbApp {
         this.gameState.set('playersCount', 1);
       }
     }
-    // Put all players back at start location.
-    this.gameState.set('playerLocations',
-      [...Array(this.gameState.get('playersCount')).keys()].map(
-        () => this.gameOptions.startLocation,
-      ));
+    // Put all players back at start location as playable.
+    [...Array(this.gameState.get('playersCount')).keys()].forEach(
+      (i) => {
+        this.gameState.set(`players[${i}].x`, this.gameOptions.startLocation.x);
+        this.gameState.set(`players[${i}].y`, this.gameOptions.startLocation.y);
+        this.gameState.set(`players[${i}].score`, 0);
+      },
+    );
     this.gameState.savePersistedState();
     this.gameState.set('gameStatus', 1);
     this.generateBoard();
@@ -158,16 +163,28 @@ export default class RwbApp {
   }
 
   nextTurn() {
+    // Aggregate some numbers.
+    const playersData = this.gameState.get('players');
+    const totalPlayersPlayable = playersData.map((e) => (e.alive && e.playable ? 1 : 0)).reduce((a, b) => a + b);
+    // Game ended.
+    if (totalPlayersPlayable === 0) {
+      this.gameState.set('status', 3);
+      return;
+    }
+
     // Increment turn or active player
     let currentTurn = this.gameState.get('currentTurn');
     let currentActivePlayer = this.gameState.get('currentActivePlayer') + 1;
+    while (currentActivePlayer < this.gameState.get('playersCount') && !playersData[currentActivePlayer].alive) {
+      currentActivePlayer += 1;
+    }
     if (currentActivePlayer >= this.gameState.get('playersCount')) {
       currentTurn += 1;
       currentActivePlayer = 0;
       this.gameState.set('currentTurn', currentTurn);
       const scoreReductionMultiplier = 2 ** (3 - this.gameState.get('mapDifficulty'));
       this.gameState.set('currentScore', Math.max(0,
-        this.gameOptions.get('maxScore') - currentTurn * scoreReductionMultiplier));
+        this.gameOptions.maxScore - currentTurn * scoreReductionMultiplier));
     }
     this.gameState.set('currentActivePlayer', currentActivePlayer);
 
@@ -176,5 +193,22 @@ export default class RwbApp {
     });
 
     this.uiEngine.modules.game.nextTurn();
+  }
+
+  updateCurrentPlayerData(data) {
+    const currentActivePlayer = this.gameState.get('currentActivePlayer');
+    this.gameState.set(`players[${currentActivePlayer}].alive`, data.alive);
+    this.gameState.set(`players[${currentActivePlayer}].x`, data.location.x);
+    this.gameState.set(`players[${currentActivePlayer}].y`, data.location.y);
+
+    // TODO: Trigger winning message.
+    if (data.location.x === this.gameOptions.endLocation.x && data.location.x === this.gameOptions.endLocation.x) {
+      const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
+      console.log(`${playerName} WINS!`);
+      this.gameState.set(`players[${currentActivePlayer}].playable`, false);
+      this.gameState.set('highScore', Math.max(this.gameState.get('currentScore'), this.gameState.get('highScore')));
+      this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
+      this.gameState.savePersistedState();
+    }
   }
 }

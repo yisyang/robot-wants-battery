@@ -17,25 +17,19 @@ export default class RwbState {
           controller: 1, // 0: none, 1: human, 2: ai-easy, 3: ai-hard, 4: open (remote)
           name: 'Player 1',
           alive: false,
-          score: 0,
+          playable: false,
         },
         {
           controller: 0,
           name: 'Player 2',
-          alive: false,
-          score: 0,
         },
         {
           controller: 0,
           name: 'Player 3',
-          alive: false,
-          score: 0,
         },
         {
           controller: 0,
           name: 'Player 4',
-          alive: false,
-          score: 0,
         },
       ],
     };
@@ -43,20 +37,6 @@ export default class RwbState {
 
     // Overwrite with persisted state across sessions.
     this.loadPersistedState();
-  }
-
-  countPlayersAtLocation(x, y) {
-    let cnt = 0;
-    for (let i = 0; i < this.state.playersCount; i++) {
-      if (this.state.players[i].x === x && this.state.players[i].y === y) {
-        cnt += 1;
-      }
-    }
-    return cnt;
-  }
-
-  countPlayersAtPlayerLocation(i) {
-    return this.countPlayersAtLocation(this.state.players[i].x, this.state.players[i].y);
   }
 
   get(key, fallback = null) {
@@ -78,7 +58,6 @@ export default class RwbState {
       currentTurn: 0,
       currentActivePlayer: -1, // Hack
       gameStatus: 0, // 0: Not started, 1: Started, 2: Paused, 3: Done
-      playerLocations: [],
       mapSeed: '',
       mapTiles: [],
     });

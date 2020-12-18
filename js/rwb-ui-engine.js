@@ -81,6 +81,7 @@ export default class RwbUiEngine {
       transition: {},
     };
 
+    PIXI.utils.skipHello();
     this.renderer = new PIXI.Application({
       width: 100, // dummy values
       height: 100,
