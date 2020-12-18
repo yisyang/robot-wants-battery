@@ -19,8 +19,9 @@ export default class RwbUiEngine {
 
     this.gameState = gameState;
 
-    // Create alias for Pixi sounds.
+    // Storage for Pixi sounds and active soundsPlaying.
     this.sounds = {};
+    this.soundsPlaying = {};
 
     // Create alias for Pixi textures.
     this.textures = null;
@@ -70,6 +71,7 @@ export default class RwbUiEngine {
           gameScore: null,
           hiScore: null,
         },
+        movementPreviews: [],
         controllerFaces: [],
         diceFaces: [],
         playerPieces: [],
@@ -199,11 +201,11 @@ export default class RwbUiEngine {
       } catch (e) {
         reject(e);
       }
-    }).then((resources) => {
+    }).then((res) => {
       console.log('Sprites loaded.');
 
       // noinspection JSUnresolvedVariable
-      this.textures = resources.rwb.textures;
+      this.textures = res.rwb.textures;
 
       // Make multi-layer stage to ensure some sprites can display above others.
       for (const container of ['base', 'map', 'sprites', 'controls', 'messages', 'menuPause', 'menuMain']) {
@@ -225,9 +227,9 @@ export default class RwbUiEngine {
           reject(e);
         }
       });
-    }).then((resources) => {
+    }).then((res) => {
       console.log('Sounds loaded.');
-      this.sounds = resources;
+      this.sounds = res;
       return true;
     }).then(() => {
       // Done loading.
@@ -253,9 +255,14 @@ export default class RwbUiEngine {
     });
   }
 
-  playSound(name) {
+  playSound(name, loop = false) {
     if (!this.options.muted) {
-      this.sounds[name].data.play();
+      if (!Object.hasOwnProperty.call(this.soundsPlaying, name)) {
+        const soundLoop = { ...this.sounds[name] };
+        soundLoop.data.loop = loop;
+        this.soundsPlaying[name] = soundLoop;
+      }
+      this.soundsPlaying[name].data.play();
     }
   }
 
@@ -335,6 +342,12 @@ export default class RwbUiEngine {
           tData.cb();
         }
       }
+    }
+  }
+
+  stopSound(name) {
+    if (Object.hasOwnProperty.call(this.soundsPlaying, name)) {
+      this.soundsPlaying[name].data.stop();
     }
   }
 

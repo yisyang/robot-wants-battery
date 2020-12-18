@@ -29,8 +29,8 @@ function startGame(muted = false) {
 window.onload = () => {
   // Just being lazy here with the hardcoded initial screen...
   // Gets initial user-DOM interaction to bypass Chrome's forced-mute.
-  const btn1 = createButton('Start', '200px', '50px', '50px');
-  const btn2 = createButton('Start Muted', '200px', '50px', '50px');
+  const btn1 = createButton('Play', '200px', '50px', '50px');
+  const btn2 = createButton('Play Muted', '200px', '50px', '50px');
 
   const divHolder = document.createElement('div');
   divHolder.id = 'pregame-buttons';

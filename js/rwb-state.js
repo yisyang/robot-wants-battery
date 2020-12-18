@@ -8,7 +8,6 @@ export default class RwbState {
     // and can be used to re-render the game board.
     this.state = {
       diceValue: [0, 0],
-      diceMoved: [0, 0],
       highScore: 0,
       mapSeed: '',
       mapDifficulty: 1,

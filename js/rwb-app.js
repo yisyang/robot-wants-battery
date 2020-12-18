@@ -173,7 +173,6 @@ export default class RwbApp {
 
     [0, 1].forEach((i) => {
       this.gameState.set(`diceValue[${i}]`, Math.floor(Math.random() * 6) + 1);
-      this.gameState.set(`diceMoved[${i}]`, 0);
     });
 
     this.uiEngine.modules.game.nextTurn();
