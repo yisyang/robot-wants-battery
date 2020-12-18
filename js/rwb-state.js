@@ -1,38 +1,42 @@
+/* eslint-disable class-methods-use-this */
+
 import { get as deepGet, has as deepHas, set as deepSet } from 'lodash-es';
+
+// Game state contains ALL state info for the game in progress,
+// and can be used to re-render the game board.
+// Putting this out of class to prevent direct access without getter/setter.
+const state = {
+  diceValue: [0, 0],
+  highScore: 0,
+  mapSeed: '',
+  mapDifficulty: 1,
+  playersCount: 1,
+  players: [
+    {
+      controller: 1, // 0: none, 1: human, 2: ai-easy, 3: ai-hard, 4: open (remote)
+      name: 'Player 1',
+      alive: false,
+      playable: false,
+    },
+    {
+      controller: 0,
+      name: 'Player 2',
+    },
+    {
+      controller: 0,
+      name: 'Player 3',
+    },
+    {
+      controller: 0,
+      name: 'Player 4',
+    },
+  ],
+};
 
 export default class RwbState {
   constructor(defaultState = {}) {
     this.defaultState = defaultState;
 
-    // Game state contains ALL state info for the game in progress,
-    // and can be used to re-render the game board.
-    this.state = {
-      diceValue: [0, 0],
-      highScore: 0,
-      mapSeed: '',
-      mapDifficulty: 1,
-      playersCount: 1,
-      players: [
-        {
-          controller: 1, // 0: none, 1: human, 2: ai-easy, 3: ai-hard, 4: open (remote)
-          name: 'Player 1',
-          alive: false,
-          playable: false,
-        },
-        {
-          controller: 0,
-          name: 'Player 2',
-        },
-        {
-          controller: 0,
-          name: 'Player 3',
-        },
-        {
-          controller: 0,
-          name: 'Player 4',
-        },
-      ],
-    };
     this.reset();
 
     // Overwrite with persisted state across sessions.
@@ -40,20 +44,20 @@ export default class RwbState {
   }
 
   get(key, fallback = null) {
-    return deepGet(this.state, key, fallback);
+    return deepGet(state, key, fallback);
   }
 
   has(key) {
-    return deepHas(this.state, key);
+    return deepHas(state, key);
   }
 
   loadPersistedState() {
-    this.state.mapDifficulty = parseInt(window.localStorage.getItem('mapDifficulty'), 10) || 1;
-    this.state.highScore = parseInt(window.localStorage.getItem('highScore'), 10) || 0;
+    state.mapDifficulty = parseInt(window.localStorage.getItem('mapDifficulty'), 10) || 1;
+    state.highScore = parseInt(window.localStorage.getItem('highScore'), 10) || 0;
   }
 
   reset() {
-    Object.assign(this.state, {
+    Object.assign(state, {
       ...this.defaultState,
       currentTurn: 0,
       currentActivePlayer: -1, // Hack
@@ -64,14 +68,14 @@ export default class RwbState {
   }
 
   savePersistedState() {
-    window.localStorage.setItem('mapDifficulty', this.state.mapDifficulty);
-    window.localStorage.setItem('highScore', this.state.highScore);
+    window.localStorage.setItem('mapDifficulty', state.mapDifficulty);
+    window.localStorage.setItem('highScore', state.highScore);
   }
 
   set(key, data) {
     if (key.substr(0, 12) === 'gameOptions.') {
       throw Error('Blocked attempt to change game options from game state.');
     }
-    deepSet(this.state, key, data);
+    deepSet(state, key, data);
   }
 }

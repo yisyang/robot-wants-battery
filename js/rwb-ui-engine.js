@@ -4,7 +4,7 @@ import RwbUiGame from './rwb-ui-game';
 import RwbUiMenu from './rwb-ui-menu';
 
 export default class RwbUiEngine {
-  constructor(gameState, options = {}) {
+  constructor(store, options = {}) {
     // Supports window resize.
     this.options = {
       width: null,
@@ -17,7 +17,7 @@ export default class RwbUiEngine {
     Object.assign(this.options, options);
     this.options.autoResize = (this.options.width === null || this.options.height === null);
 
-    this.gameState = gameState;
+    this.store = store;
 
     // Storage for Pixi sounds and active soundsPlaying.
     this.sounds = {};
@@ -90,8 +90,8 @@ export default class RwbUiEngine {
 
     // Init modules.
     this.modules = {
-      game: new RwbUiGame(this, gameState),
-      menu: new RwbUiMenu(this, gameState),
+      game: new RwbUiGame(this, store),
+      menu: new RwbUiMenu(this, store),
     };
 
     this.handleEvents();
@@ -282,11 +282,11 @@ export default class RwbUiEngine {
     this.ui.containers.sprites.visible = false;
     this.ui.containers.controls.visible = false;
     this.ui.containers.messages.visible = false;
-    if (this.gameState.get('gameStatus') === 0) {
+    if (this.store.get('gameStatus') === 0) {
       // In menu.
       this.ui.containers.base.visible = true;
       this.ui.containers.menuMain.visible = true;
-    } else if (this.gameState.get('gameStatus') === 2) {
+    } else if (this.store.get('gameStatus') === 2) {
       // Paused game.
       this.ui.containers.base.visible = true;
       this.ui.containers.menuPause.visible = true;

@@ -1,24 +1,25 @@
 import * as PIXI from 'pixi.js';
 
+// Local view data.
+const data = {
+  activeKeyboardDice: 0,
+  canMove: false,
+  movement: {
+    start: null,
+    moves: [],
+  },
+};
+
 export default class RwbUiGame {
-  constructor(engine, gameState) {
+  constructor(engine, store) {
     this.engine = engine;
-    this.gameState = gameState;
+    this.store = store;
 
     this.options = {
       width: null,
       height: null,
       board: {},
       controls: {},
-      canMove: false,
-    };
-
-    // Local view data.
-    this.data = {
-      movement: {
-        start: null,
-        moves: [],
-      },
     };
   }
 
@@ -50,7 +51,7 @@ export default class RwbUiGame {
       if (diceIndex === null || diceIndex === key) {
         this.clearMovementPreviews(key);
         // Reset local movement view data.
-        this.data.movement.moves[key] = {
+        data.movement.moves[key] = {
           alive: false,
           diceIndex: null,
           direction: null,
@@ -62,9 +63,9 @@ export default class RwbUiGame {
     });
 
     // Reset local starting position data.
-    const currentActivePlayer = this.gameState.get('currentActivePlayer');
-    const { x, y } = this.gameState.get(`players[${currentActivePlayer}]`);
-    this.data.movement.start = [x, y];
+    const currentActivePlayer = this.store.get('currentActivePlayer');
+    const { x, y } = this.store.get(`players[${currentActivePlayer}]`);
+    data.movement.start = [x, y];
   }
 
   clearMovementPreviews(moveIndex) {
@@ -149,20 +150,20 @@ export default class RwbUiGame {
   }
 
   computePlannedMovementData(moveIndex, options) {
-    let diceValue = this.gameState.get(`diceValue[${options.dice}]`);
+    let diceValue = this.store.get(`diceValue[${options.dice}]`);
 
     // Determine starting location.
     let startingLocation;
     let flying = false;
     if (moveIndex === 0) {
-      startingLocation = this.data.movement.start;
-    } else if (options.direction === this.data.movement.moves[0].direction) {
+      startingLocation = data.movement.start;
+    } else if (options.direction === data.movement.moves[0].direction) {
       // Continued move (fly).
-      startingLocation = this.data.movement.start;
-      diceValue += this.gameState.get(`diceValue[${1 - options.dice}]`);
+      startingLocation = data.movement.start;
+      diceValue += this.store.get(`diceValue[${1 - options.dice}]`);
       flying = true;
     } else {
-      startingLocation = this.data.movement.moves[0].target;
+      startingLocation = data.movement.moves[0].target;
     }
 
     // Convert movement into x/y increment.
@@ -170,7 +171,7 @@ export default class RwbUiGame {
     const increment = (options.direction === 'Down' || options.direction === 'Right') ? 1 : -1;
 
     // Check if movement is legal.
-    const mapTilesData = this.gameState.get('mapTiles');
+    const mapTilesData = this.store.get('mapTiles');
     let drowned = false;
     let oob = false;
     let [i, j] = startingLocation;
@@ -196,7 +197,7 @@ export default class RwbUiGame {
     }
 
     // Save local movement data.
-    this.data.movement.moves[moveIndex] = {
+    data.movement.moves[moveIndex] = {
       alive: !(oob || drowned),
       diceIndex: oob ? -1 : options.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
       direction: options.direction,
@@ -207,7 +208,7 @@ export default class RwbUiGame {
   }
 
   countPlayersAtPlayerLocation(i) {
-    const playersData = this.gameState.get('players');
+    const playersData = this.store.get('players');
     const { x, y } = playersData[i];
     return playersData.map((e) => ((e.x === x && e.y === y) ? 1 : 0)).reduce((a, b) => a + b);
   }
@@ -255,7 +256,7 @@ export default class RwbUiGame {
   }
 
   drawMovementPreview(moveIndex) {
-    const moveData = this.data.movement.moves[moveIndex];
+    const moveData = data.movement.moves[moveIndex];
     const color = (moveData.alive ? 0x00ff00 : 0xff0000);
     const marginX = Math.floor(this.options.mx + this.options.board.px);
     const marginY = Math.floor(this.options.my + this.options.board.pt);
@@ -284,11 +285,11 @@ export default class RwbUiGame {
     this.clearMovementPreviews(0);
     this.clearMovementPreviews(1);
     // Redraw movement 0 if available and if we are not flying.
-    if (this.data.movement.moves[0].direction !== null && !this.data.movement.moves[1].flying) {
+    if (data.movement.moves[0].direction !== null && !data.movement.moves[1].flying) {
       this.drawMovementPreview(0);
     }
     // Always draw movement 1 if direction is available.
-    if (this.data.movement.moves[1].direction !== null) {
+    if (data.movement.moves[1].direction !== null) {
       this.drawMovementPreview(1);
     }
   }
@@ -297,7 +298,13 @@ export default class RwbUiGame {
     ['Up', 'Down', 'Left', 'Right'].forEach((direction) => {
       const btn = this.engine.ui.objects[`btnDice${diceIndex}${direction}`];
       btn.alpha = 1;
-      this.options.canMove = true;
+      data.canMove = true;
+    });
+  }
+
+  highlightActiveKeyboardDice() {
+    [0, 1].forEach((diceIndex) => {
+      this.engine.ui.objects.diceFaces[diceIndex].tint = (diceIndex === data.activeKeyboardDice ? 0xffff00 : 0xffffff);
     });
   }
 
@@ -306,11 +313,12 @@ export default class RwbUiGame {
    */
   init() {
     this.initGameControls();
+    this.initKeyboardEvents();
     this.initUiMessages();
 
     // Initialize local movement data for rendering.
     [0, 1].forEach((key) => {
-      this.data.movement.moves[key] = {
+      data.movement.moves[key] = {
         alive: false,
         diceIndex: null,
         direction: null,
@@ -373,7 +381,7 @@ export default class RwbUiGame {
         this.engine.ui.objects[`btnDice${i}${direction}`] = btn;
         this.engine.ui.containers.controls.addChild(btn);
         btn.on('click', () => {
-          if (this.options.canMove) {
+          if (data.canMove) {
             this.engine.dispatchEvent(new CustomEvent('planMove', {
               detail: {
                 dice: i,
@@ -383,6 +391,65 @@ export default class RwbUiGame {
           }
         });
       });
+    });
+  }
+
+  initKeyboardEvents() {
+    // Register window keyboard events.
+    window.addEventListener('keydown', (e) => {
+      let direction = null;
+      switch (e.code) {
+        case 'Numpad8':
+        case 'KeyW':
+        case 'ArrowUp':
+          direction = 'Up';
+          break;
+        case 'Numpad4':
+        case 'KeyA':
+        case 'ArrowLeft':
+          direction = 'Left';
+          break;
+        case 'Numpad2':
+        case 'KeyS':
+        case 'ArrowDown':
+          direction = 'Down';
+          break;
+        case 'Numpad6':
+        case 'KeyD':
+        case 'ArrowRight':
+          direction = 'Right';
+          break;
+        case 'Numpad5':
+        case 'KeyX':
+          // Switch dice.
+          data.activeKeyboardDice = (data.activeKeyboardDice === 1 ? 0 : 1);
+          break;
+        case 'Numpad0':
+        case 'KeyC':
+          // Cancel.
+          this.engine.dispatchEvent(new CustomEvent('cancel', {}));
+          data.activeKeyboardDice = 0;
+          break;
+        case 'NumpadEnter':
+        case 'KeyZ':
+          // Confirm.
+          this.engine.dispatchEvent(new CustomEvent('confirm', {}));
+          return;
+        default:
+          return;
+      }
+      if (direction !== null && data.canMove) {
+        // Save current active dice and emit directional event.
+        data.activeKeyboardDice = (data.activeKeyboardDice === 1 ? 1 : 0);
+        this.engine.dispatchEvent(new CustomEvent('planMove', {
+          detail: {
+            dice: data.activeKeyboardDice,
+            direction,
+          },
+        }));
+      } else {
+        this.highlightActiveKeyboardDice();
+      }
     });
   }
 
@@ -400,21 +467,21 @@ export default class RwbUiGame {
   }
 
   planMove(options) {
-    if (this.gameState.get(`diceValue[${options.dice}]`) === 0) {
+    if (this.store.get(`diceValue[${options.dice}]`) === 0) {
       return;
     }
 
     // In general, we'll be modifying the first move.
     let moveIndex = 0;
     // To move onto second move, the first move must have been made by another dice.
-    if (this.data.movement.moves[0].diceIndex === (1 - options.dice)) {
+    if (data.movement.moves[0].diceIndex === (1 - options.dice)) {
       // And player needs to be alive OR flying after the first move.
-      if (this.data.movement.moves[0].alive || this.data.movement.moves[0].direction === options.direction) {
+      if (data.movement.moves[0].alive || data.movement.moves[0].direction === options.direction) {
         // And player must not have already tried the same direction and ended with death.
-        if (this.data.movement.moves[1].direction !== options.direction) {
+        if (data.movement.moves[1].direction !== options.direction) {
           // Trying a new direction.
           moveIndex = 1;
-        } else if (this.data.movement.moves[1].alive) {
+        } else if (data.movement.moves[1].alive) {
           // Trying the same direction and still alive, no change needed.
           return;
         }
@@ -428,12 +495,25 @@ export default class RwbUiGame {
 
     this.computePlannedMovementData(moveIndex, options);
     this.drawMovementPreviews();
+
+    // In addition, automatically toggle other dice as next activeKeyboardDice on valid moves.
+    if (data.activeKeyboardDice !== null) {
+      if (moveIndex === 0 && data.movement.moves[0].alive) {
+        data.activeKeyboardDice = 1 - data.activeKeyboardDice;
+        this.highlightActiveKeyboardDice();
+      }
+    }
   }
 
   moveRobot() {
-    if (this.data.movement.moves[1].direction === null) {
+    if (data.movement.moves[1].direction === null) {
       return;
     }
+
+    // Remove keyboard highlighting.
+    data.activeKeyboardDice = null;
+    this.highlightActiveKeyboardDice();
+
 
     // TODO: Move player piece slowly, 1 square at a time, and check for death.
     // Rotate on death.
@@ -443,26 +523,26 @@ export default class RwbUiGame {
     // this.uiEngine.modules.game.moveRobotStep()
 
     // If player is alive, update player position to target position.
-    const [x, y] = this.data.movement.moves[1].target;
+    const [x, y] = data.movement.moves[1].target;
     this.engine.dispatchEvent(new CustomEvent('turnEnded', {
       detail: {
         location: { x, y },
-        alive: this.data.movement.moves[1].alive,
+        alive: data.movement.moves[1].alive,
       },
     }));
   }
 
   nextTurn() {
-    const currentActivePlayer = this.gameState.get('currentActivePlayer');
-    const currentTurn = this.gameState.get('currentTurn');
+    const currentActivePlayer = this.store.get('currentActivePlayer');
+    const currentTurn = this.store.get('currentTurn');
 
     this.engine.updateUiMessage('gameTurn', { text: `Turn: ${currentTurn}` });
-    this.engine.updateUiMessage('gameScore', { text: `Score: ${this.gameState.get('currentScore')}` });
+    this.engine.updateUiMessage('gameScore', { text: `Score: ${this.store.get('currentScore')}` });
 
-    const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
+    const playerName = this.store.get(`players.${currentActivePlayer}.name`);
     this.engine.updateUiMessage('playerTurn', {
       text: `${playerName}'s turn.`,
-      fill: this.gameState.get('gameOptions.playerColors')[currentActivePlayer],
+      fill: this.store.get('gameOptions.playerColors')[currentActivePlayer],
       fontSize: 1.2 * this.options.gridSizePx,
       x: this.options.mx + this.options.board.widthWP / 2,
       y: this.options.my + this.options.board.heightWP / 2,
@@ -480,7 +560,7 @@ export default class RwbUiGame {
 
     this.repositionPlayerPieces();
     this.clearMovement();
-    this.options.canMove = false;
+    data.canMove = false;
     this.engine.ui.objects.controls.btnCancel.alpha = 0.3;
     this.engine.ui.objects.controls.btnConfirm.alpha = 0.3;
     [0, 1].forEach((i) => {
@@ -488,7 +568,7 @@ export default class RwbUiGame {
         rollDice: true,
         steps: 100,
         cb: () => {
-          const diceValue = this.gameState.get(`diceValue[${i}]`);
+          const diceValue = this.store.get(`diceValue[${i}]`);
           this.engine.ui.objects.diceFaces[i].texture = this.engine.textures[`dice-face-${diceValue}`];
 
           this.enableDiceButtons(i);
@@ -507,7 +587,7 @@ export default class RwbUiGame {
     this.engine.ui.objects.map.board.height = this.options.board.heightWP;
 
     // In-game.
-    if (this.gameState.get('gameStatus') > 0) {
+    if (this.store.get('gameStatus') > 0) {
       // Reposition various messages.
       this.repositionGameMessages();
 
@@ -603,12 +683,12 @@ export default class RwbUiGame {
       this.engine.ui.objects.diceFaces[i].position.set(diceFacePos[i][0], diceFacePos[i][1]);
 
       // Dice controls.
-      for (const [dir, x, y] of Object.values([
+      [
         ['Up', 0, -1],
         ['Down', 0, 1],
         ['Left', -1, 0],
         ['Right', 1, 0],
-      ])) {
+      ].forEach(([dir, x, y]) => {
         const btn = this.engine.ui.objects[`btnDice${i}${dir}`];
         btn.width = 12 * this.options.controls.du;
         btn.height = 12 * this.options.controls.du;
@@ -616,13 +696,13 @@ export default class RwbUiGame {
           diceFacePos[i][0] + 25 * x * this.options.controls.du,
           diceFacePos[i][1] + 25 * y * this.options.controls.du,
         );
-      }
+      });
     });
   }
 
   repositionGameMessages() {
     // Update game status messages at top.
-    const left = this.options.mx + 2.5 * this.options.infoTextSize;
+    const left = this.options.mx + this.options.infoTextSize;
     const center = this.options.mx + this.options.board.widthWP / 2;
     const right = this.options.mx + this.options.board.widthWP - this.options.infoTextSize;
     const row1 = this.options.my + this.options.infoTextSize;
@@ -664,10 +744,10 @@ export default class RwbUiGame {
     );
     const halfGridSizePx = this.options.gridSizePx / 2;
 
-    const playersCount = Math.min(this.gameState.get('playersCount'), this.engine.ui.objects.playerPieces.length);
+    const playersCount = Math.min(this.store.get('playersCount'), this.engine.ui.objects.playerPieces.length);
     for (let i = 0; i < playersCount; i++) {
       const piece = this.engine.ui.objects.playerPieces[i];
-      const playerData = this.gameState.get(`players.${i}`);
+      const playerData = this.store.get(`players.${i}`);
 
       const offsetX = marginX + playerData.x * this.options.gridSizePx;
       const offsetY = marginY + playerData.y * this.options.gridSizePx;
@@ -688,13 +768,13 @@ export default class RwbUiGame {
   }
 
   startGame() {
-    const difficultyLabel = this.gameState.get('gameOptions.difficultyLabels')[this.gameState.get('mapDifficulty')];
+    const difficultyLabel = this.store.get('gameOptions.difficultyLabels')[this.store.get('mapDifficulty')];
     this.clearGameMap();
     this.engine.updateUiMessage('mapDifficulty', { text: `Difficulty: ${difficultyLabel}` });
-    this.engine.updateUiMessage('mapSeed', { text: `Map Seed: ${this.gameState.get('mapSeed')}` });
-    this.engine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
-    this.createGameTiles(this.gameState.get('mapTiles'));
-    this.createPlayerPieces(this.gameState.get('playersCount'));
-    this.options.canMove = false;
+    this.engine.updateUiMessage('mapSeed', { text: `Map Seed: ${this.store.get('mapSeed')}` });
+    this.engine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.store.get('highScore')}` });
+    this.createGameTiles(this.store.get('mapTiles'));
+    this.createPlayerPieces(this.store.get('playersCount'));
+    data.canMove = false;
   }
 }

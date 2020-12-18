@@ -16,7 +16,7 @@ export default class RwbApp {
       muted: false,
       controllersAllowed: [0, 1],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
-      waterTileChances: [0.05, 0.14, 0.19, 0.25], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
+      waterTileChances: [0.05, 0.15, 0.21, 0.30], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
     };
     Object.assign(this.gameOptions, gameOptions);
@@ -39,12 +39,12 @@ export default class RwbApp {
 
     // Game state contains ALL state info for the game in progress,
     // and can be used to re-render the game board.
-    this.gameState = new RwbState({
+    this.store = new RwbState({
       gameOptions: this.gameOptions,
       currentScore: this.gameOptions.maxScore, // -8/-4/-2/-1 per turn on easy/normal/difficult/impossible
     });
 
-    this.uiEngine = new RwbUiEngine(this.gameState, {
+    this.uiEngine = new RwbUiEngine(this.store, {
       holderDivId,
       width: this.gameOptions.displayOptions.width,
       height: this.gameOptions.displayOptions.height,
@@ -67,21 +67,22 @@ export default class RwbApp {
         }
       });
       this.uiEngine.addEventListener('pause', () => {
-        this.gameState.set('gameStatus', 2);
+        this.store.set('gameStatus', 2);
         this.uiEngine.refreshDisplay();
       });
       this.uiEngine.addEventListener('resume', () => {
-        this.gameState.set('gameStatus', 1);
+        this.store.set('gameStatus', 1);
         this.uiEngine.refreshDisplay();
       });
       this.uiEngine.addEventListener('abandon', () => {
-        this.gameState.set('gameStatus', 0);
+        this.store.set('gameStatus', 0);
         this.uiEngine.refreshDisplay();
       });
       this.uiEngine.addEventListener('turnEnded', (e) => {
         this.updateCurrentPlayerData(e.detail);
         this.nextTurn();
       });
+
       // Trigger it manually for initial rendering.
       this.uiEngine.refreshDisplay();
       console.log('UI engine initialized.');
@@ -89,72 +90,72 @@ export default class RwbApp {
   }
 
   activatePlayerPieces() {
-    for (let i = 0, playersCount = this.gameState.get('playersCount'); i < playersCount; i++) {
-      this.gameState.set(`players[${i}].alive`, true);
-      this.gameState.set(`players[${i}].playable`, true);
+    for (let i = 0, playersCount = this.store.get('playersCount'); i < playersCount; i++) {
+      this.store.set(`players[${i}].alive`, true);
+      this.store.set(`players[${i}].playable`, true);
     }
   }
 
   generateBoard() {
     // Seed RNG.
-    let seedPhrase = this.gameState.get('mapSeed');
+    let seedPhrase = this.store.get('mapSeed');
     if (seedPhrase === null || seedPhrase === '') {
       seedPhrase = Math.floor(Math.random() * 1e6).toString();
-      this.gameState.set('mapSeed', seedPhrase);
+      this.store.set('mapSeed', seedPhrase);
     }
     const randomSeeder = new RandomSeeder(seedPhrase);
 
     // Compute water tiles.
-    this.gameState.set('mapTiles', []);
-    const waterTileChances = this.gameOptions.waterTileChances[this.gameState.get('mapDifficulty')];
+    this.store.set('mapTiles', []);
+    const waterTileChances = this.gameOptions.waterTileChances[this.store.get('mapDifficulty')];
     for (let i = 0; i < this.gameOptions.gridCountX; i++) {
-      this.gameState.set(`mapTiles[${i}]`, []);
+      this.store.set(`mapTiles[${i}]`, []);
       for (let j = 0; j < this.gameOptions.gridCountY; j++) {
-        this.gameState.set(`mapTiles[${i}][${j}]`, {
+        this.store.set(`mapTiles[${i}][${j}]`, {
           type: randomSeeder.rand() < waterTileChances ? 'water' : 'land',
         });
       }
     }
 
     // Hard-code start and end locations as non-water.
-    this.gameState.set(`mapTiles.${this.gameOptions.startLocation.x}.${this.gameOptions.startLocation.y}.type`,
+    this.store.set(`mapTiles.${this.gameOptions.startLocation.x}.${this.gameOptions.startLocation.y}.type`,
       'start');
-    this.gameState.set(`mapTiles.${this.gameOptions.endLocation.x}.${this.gameOptions.endLocation.y}.type`, 'end');
+    this.store.set(`mapTiles.${this.gameOptions.endLocation.x}.${this.gameOptions.endLocation.y}.type`, 'end');
 
     // Place player pieces.
     this.activatePlayerPieces();
   }
 
   newGame(options = null) {
-    this.gameState.reset();
+    this.store.reset();
     if (options.mapSeed !== undefined) {
-      this.gameState.set('mapSeed', options.mapSeed);
+      this.store.set('mapSeed', options.mapSeed);
     }
     if (options.mapDifficulty !== undefined) {
-      this.gameState.set('mapDifficulty', options.mapDifficulty);
-      this.gameState.set('players[1].controller', options.playerController[1]);
-      this.gameState.set('players[2].controller', options.playerController[2]);
-      this.gameState.set('players[3].controller', options.playerController[3]);
+      this.store.set('mapDifficulty', options.mapDifficulty);
+      this.store.set('players[1].controller', options.playerController[1]);
+      this.store.set('players[2].controller', options.playerController[2]);
+      this.store.set('players[3].controller', options.playerController[3]);
       if (options.playerController[3] !== 0) {
-        this.gameState.set('playersCount', 4);
+        this.store.set('playersCount', 4);
       } else if (options.playerController[2] !== 0) {
-        this.gameState.set('playersCount', 3);
+        this.store.set('playersCount', 3);
       } else if (options.playerController[1] !== 0) {
-        this.gameState.set('playersCount', 2);
+        this.store.set('playersCount', 2);
       } else {
-        this.gameState.set('playersCount', 1);
+        this.store.set('playersCount', 1);
       }
     }
     // Put all players back at start location as playable.
-    [...Array(this.gameState.get('playersCount')).keys()].forEach(
+    [...Array(this.store.get('playersCount')).keys()].forEach(
       (i) => {
-        this.gameState.set(`players[${i}].x`, this.gameOptions.startLocation.x);
-        this.gameState.set(`players[${i}].y`, this.gameOptions.startLocation.y);
-        this.gameState.set(`players[${i}].score`, 0);
+        this.store.set(`players[${i}].x`, this.gameOptions.startLocation.x);
+        this.store.set(`players[${i}].y`, this.gameOptions.startLocation.y);
+        this.store.set(`players[${i}].score`, 0);
       },
     );
-    this.gameState.savePersistedState();
-    this.gameState.set('gameStatus', 1);
+    this.store.savePersistedState();
+    this.store.set('gameStatus', 1);
     this.generateBoard();
     this.uiEngine.modules.game.startGame();
     this.uiEngine.playSound('start');
@@ -164,51 +165,55 @@ export default class RwbApp {
 
   nextTurn() {
     // Aggregate some numbers.
-    const playersData = this.gameState.get('players');
+    const playersData = this.store.get('players');
     const totalPlayersPlayable = playersData.map((e) => (e.alive && e.playable ? 1 : 0)).reduce((a, b) => a + b);
     // Game ended.
     if (totalPlayersPlayable === 0) {
-      this.gameState.set('status', 3);
+      this.store.set('status', 3);
       return;
     }
 
     // Increment turn or active player
-    let currentTurn = this.gameState.get('currentTurn');
-    let currentActivePlayer = this.gameState.get('currentActivePlayer') + 1;
-    while (currentActivePlayer < this.gameState.get('playersCount') && !playersData[currentActivePlayer].alive) {
+    let currentTurn = this.store.get('currentTurn');
+    let currentActivePlayer = this.store.get('currentActivePlayer') + 1;
+    while (currentActivePlayer < this.store.get('playersCount') && !playersData[currentActivePlayer].alive) {
       currentActivePlayer += 1;
     }
-    if (currentActivePlayer >= this.gameState.get('playersCount')) {
+    if (currentActivePlayer >= this.store.get('playersCount')) {
       currentTurn += 1;
       currentActivePlayer = 0;
-      this.gameState.set('currentTurn', currentTurn);
-      const scoreReductionMultiplier = 2 ** (3 - this.gameState.get('mapDifficulty'));
-      this.gameState.set('currentScore', Math.max(0,
+      this.store.set('currentTurn', currentTurn);
+      const scoreReductionMultiplier = 2 ** (3 - this.store.get('mapDifficulty'));
+      this.store.set('currentScore', Math.max(0,
         this.gameOptions.maxScore - currentTurn * scoreReductionMultiplier));
     }
-    this.gameState.set('currentActivePlayer', currentActivePlayer);
+    this.store.set('currentActivePlayer', currentActivePlayer);
 
     [0, 1].forEach((i) => {
-      this.gameState.set(`diceValue[${i}]`, Math.floor(Math.random() * 6) + 1);
+      this.store.set(`diceValue[${i}]`, Math.floor(Math.random() * 6) + 1);
     });
 
     this.uiEngine.modules.game.nextTurn();
   }
 
   updateCurrentPlayerData(data) {
-    const currentActivePlayer = this.gameState.get('currentActivePlayer');
-    this.gameState.set(`players[${currentActivePlayer}].alive`, data.alive);
-    this.gameState.set(`players[${currentActivePlayer}].x`, data.location.x);
-    this.gameState.set(`players[${currentActivePlayer}].y`, data.location.y);
+    const currentActivePlayer = this.store.get('currentActivePlayer');
+    this.store.set(`players[${currentActivePlayer}].alive`, data.alive);
+    this.store.set(`players[${currentActivePlayer}].x`, data.location.x);
+    this.store.set(`players[${currentActivePlayer}].y`, data.location.y);
 
     // TODO: Trigger winning message.
     if (data.location.x === this.gameOptions.endLocation.x && data.location.x === this.gameOptions.endLocation.x) {
-      const playerName = this.gameState.get(`players.${currentActivePlayer}.name`);
+      const playerName = this.store.get(`players.${currentActivePlayer}.name`);
       console.log(`${playerName} WINS!`);
-      this.gameState.set(`players[${currentActivePlayer}].playable`, false);
-      this.gameState.set('highScore', Math.max(this.gameState.get('currentScore'), this.gameState.get('highScore')));
-      this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.gameState.get('highScore')}` });
-      this.gameState.savePersistedState();
+      this.store.set(`players[${currentActivePlayer}].playable`, false);
+      this.store.set('highScore', Math.max(this.store.get('currentScore'), this.store.get('highScore')));
+      this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.store.get('highScore')}` });
+      this.store.savePersistedState();
+
+      // Temporary: put winning player pieces at the right location in case there is no next turn.
+      this.uiEngine.modules.game.clearMovement();
+      this.uiEngine.modules.game.repositionPlayerPieces();
     }
   }
 }

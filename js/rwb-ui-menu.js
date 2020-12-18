@@ -1,9 +1,14 @@
 import * as PIXI from 'pixi.js';
 
+// Local view data.
+const data = {
+  playerController: [1, 0, 0, 0],
+};
+
 export default class RwbUiMenu {
-  constructor(engine, gameState) {
+  constructor(engine, store) {
     this.engine = engine;
-    this.gameState = gameState;
+    this.store = store;
 
     this.options = {
       width: null,
@@ -11,11 +16,7 @@ export default class RwbUiMenu {
       maxPlayersCount: 4, // Hardcoded.
     };
 
-    // Local view data.
-    this.data = {
-      mapDifficulty: this.gameState.get('mapDifficulty'),
-      playerController: [1, 0, 0, 0],
-    };
+    data.mapDifficulty = this.store.get('mapDifficulty');
   }
 
   computeMenuLayout() {
@@ -46,14 +47,14 @@ export default class RwbUiMenu {
 
     // Controller faces.
     for (let i = 0; i < this.options.maxPlayersCount; i++) {
-      const texture = `face-${this.data.playerController[i]}`;
+      const texture = `face-${data.playerController[i]}`;
       const btn = new PIXI.Sprite(this.engine.textures[texture]);
       this.engine.ui.objects.controllerFaces.push(btn);
       this.engine.ui.containers.menuMain.addChild(btn);
     }
 
     // Map difficulty.
-    const btnDifficulty = new PIXI.Sprite(this.engine.textures[`difficulty-${this.data.mapDifficulty}`]);
+    const btnDifficulty = new PIXI.Sprite(this.engine.textures[`difficulty-${data.mapDifficulty}`]);
     this.engine.ui.objects.menu.mapDifficulty = btnDifficulty;
     this.engine.ui.containers.menuMain.addChild(btnDifficulty);
 
@@ -83,7 +84,7 @@ export default class RwbUiMenu {
     this.engine.ui.objects.menu.btnStartGame = btnStart;
     this.engine.ui.containers.menuMain.addChild(btnStart);
     btnStart.on('click', () => {
-      this.engine.dispatchEvent(new CustomEvent('newGame', { detail: this.data }));
+      this.engine.dispatchEvent(new CustomEvent('newGame', { detail: data }));
     });
   }
 
@@ -169,32 +170,32 @@ export default class RwbUiMenu {
   togglePlayer(index, isPrevious = false) {
     // If previous index is empty, then player cannot be toggled.
     // Assume allowed indices are consecutive integers.
-    if (this.data.playerController[index - 1] === 0) {
+    if (data.playerController[index - 1] === 0) {
       return;
     }
-    let newController = this.data.playerController[index] + (isPrevious ? -1 : 1);
-    const controllersAllowed = this.gameState.get('gameOptions.controllersAllowed');
+    let newController = data.playerController[index] + (isPrevious ? -1 : 1);
+    const controllersAllowed = this.store.get('gameOptions.controllersAllowed');
     if (newController < 0) {
       newController = controllersAllowed[controllersAllowed.length - 1];
     }
     if (newController >= controllersAllowed.length) {
       newController = 0;
     }
-    this.data.playerController[index] = newController;
+    data.playerController[index] = newController;
     this.engine.ui.objects.controllerFaces[index].texture = this.engine.textures[`face-${newController}`];
 
     this.updateMenuPlayerVisibility();
   }
 
   toggleMapDifficulty(isPrevious = false) {
-    let newDifficulty = this.data.mapDifficulty + (isPrevious ? -1 : 1);
+    let newDifficulty = data.mapDifficulty + (isPrevious ? -1 : 1);
     if (newDifficulty < 0) {
       newDifficulty = 3;
     }
     if (newDifficulty > 3) {
       newDifficulty = 0;
     }
-    this.data.mapDifficulty = newDifficulty;
+    data.mapDifficulty = newDifficulty;
     this.engine.ui.objects.menu.mapDifficulty.texture = this.engine.textures[`difficulty-${newDifficulty}`];
   }
 
@@ -202,14 +203,14 @@ export default class RwbUiMenu {
     // Hide faces and arrows of all None players but the first.
     let indexFirstNone = this.options.maxPlayersCount;
     for (let i = 1; i < this.options.maxPlayersCount; i++) {
-      const controller = this.data.playerController[i];
+      const controller = data.playerController[i];
       let visible = true;
       if (controller === 0) {
         if (i <= indexFirstNone) {
           indexFirstNone = i;
           // Also assign all future controllers to 0.
           for (let j = i + 1; j < this.options.maxPlayersCount; j++) {
-            this.data.playerController[j] = 0;
+            data.playerController[j] = 0;
             this.engine.ui.objects.controllerFaces[j].texture = this.engine.textures['face-0'];
           }
         } else {
