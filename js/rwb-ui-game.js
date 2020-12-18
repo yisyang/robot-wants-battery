@@ -43,6 +43,45 @@ export default class RwbUiGame {
     }
   }
 
+  clearMovement(diceIndex = null) {
+    // Remove preview overlay tiles.
+    [0, 1].forEach((key) => {
+      // noinspection JSIncompatibleTypesComparison
+      if (diceIndex === null || diceIndex === key) {
+        this.clearMovementPreviews(key);
+        // Reset local movement view data.
+        this.data.movement.moves[key] = {
+          alive: false,
+          diceIndex: null,
+          direction: null,
+          flying: false,
+          tilesCrossed: [],
+          target: [],
+        };
+      }
+    });
+
+    // Reset local starting position data.
+    const currentActivePlayer = this.gameState.get('currentActivePlayer');
+    const { x, y } = this.gameState.get(`playerLocations[${currentActivePlayer}]`);
+    this.data.movement.start = [x, y];
+  }
+
+  clearMovementPreviews(moveIndex) {
+    if (Object.hasOwnProperty.call(this.engine.ui.objects.movementPreviews, moveIndex)) {
+      // Remove UI preview.
+      this.engine.ui.objects.movementPreviews[moveIndex].forEach((tile) => {
+        this.engine.ui.containers.map.removeChild(tile);
+      });
+    }
+    this.engine.ui.objects.movementPreviews[moveIndex] = [];
+
+    if (moveIndex === 0) {
+      this.engine.ui.objects.controls.btnCancel.alpha = 0.3;
+    }
+    this.engine.ui.objects.controls.btnConfirm.alpha = 0.3;
+  }
+
   computeBaseGridSize() {
     const gridSizePxX = this.engine.options.width / (this.engine.options.gridCountX + 2);
     // Additional 10% height reserved for turn/score display.
@@ -151,6 +190,45 @@ export default class RwbUiGame {
     }
   }
 
+  drawMovementPreview(moveIndex) {
+    const moveData = this.data.movement.moves[moveIndex];
+    const color = (moveData.alive ? 0x00ff00 : 0xff0000);
+    const marginX = Math.floor(this.options.mx + this.options.board.px);
+    const marginY = Math.floor(this.options.my + this.options.board.pt);
+    const [i0, j0] = moveData.tilesCrossed[0];
+    moveData.tilesCrossed.forEach(([i, j]) => {
+      const tile = new PIXI.Graphics();
+      const offsetX = marginX + i * this.options.gridSizePx;
+      const offsetY = marginY + j * this.options.gridSizePx;
+      tile.beginFill((i === i0 && j === j0) ? 0xffff00 : color);
+      tile.drawRect(0, 0, this.options.gridSizePx, this.options.gridSizePx);
+      tile.endFill();
+      tile.alpha = 0.5;
+      tile.position.set(offsetX, offsetY);
+      this.engine.ui.objects.movementPreviews[moveIndex].push(tile);
+      this.engine.ui.containers.map.addChild(tile);
+    });
+
+    this.engine.ui.objects.controls.btnCancel.alpha = 1;
+    if (moveIndex === 1) {
+      this.engine.ui.objects.controls.btnConfirm.alpha = 1;
+    }
+  }
+
+  drawMovementPreviews(moveIndex) {
+    // Redraw movement previews.
+    this.clearMovementPreviews(0);
+    if (!this.data.movement.moves[moveIndex].flying) {
+      // Either moveIndex is 0
+      // OR moveIndex is 1 and is NOT flying.
+      this.drawMovementPreview(0);
+    }
+    if (moveIndex === 1) {
+      this.clearMovementPreviews(1);
+      this.drawMovementPreview(1);
+    }
+  }
+
   enableDiceButtons(diceIndex) {
     ['Up', 'Down', 'Left', 'Right'].forEach((direction) => {
       const btn = this.engine.ui.objects[`btnDice${diceIndex}${direction}`];
@@ -245,96 +323,8 @@ export default class RwbUiGame {
     this.engine.createUiMessage('hiScore', { align: 'right' });
   }
 
-  clearMovement(diceIndex = null) {
-    // Remove preview overlay tiles.
-    [0, 1].forEach((key) => {
-      // noinspection JSIncompatibleTypesComparison
-      if (diceIndex === null || diceIndex === key) {
-        this.clearMovementPreview(key);
-        // Reset local movement view data.
-        this.data.movement.moves[key] = {
-          alive: false,
-          diceIndex: null,
-          direction: null,
-          tilesCrossed: [],
-          target: [],
-        };
-      }
-    });
-
-    // Reset local starting position data.
-    const currentActivePlayer = this.gameState.get('currentActivePlayer');
-    const { x, y } = this.gameState.get(`playerLocations[${currentActivePlayer}]`);
-    this.data.movement.start = [x, y];
-  }
-
-  clearMovementPreview(moveIndex) {
-    if (Object.hasOwnProperty.call(this.engine.ui.objects.movementPreviews, moveIndex)) {
-      // Remove UI preview.
-      this.engine.ui.objects.movementPreviews[moveIndex].forEach((tile) => {
-        this.engine.ui.containers.map.removeChild(tile);
-      });
-    }
-    this.engine.ui.objects.movementPreviews[moveIndex] = [];
-
-    if (moveIndex === 0) {
-      this.engine.ui.objects.controls.btnCancel.alpha = 0.3;
-    }
-    this.engine.ui.objects.controls.btnConfirm.alpha = 0.3;
-  }
-
-  drawMovementPreview(moveIndex) {
-    const moveData = this.data.movement.moves[moveIndex];
-    const color = (moveData.alive ? 0x00ff00 : 0xff0000);
-    const marginX = Math.floor(this.options.mx + this.options.board.px);
-    const marginY = Math.floor(this.options.my + this.options.board.pt);
-    const [i0, j0] = moveData.tilesCrossed[0];
-    moveData.tilesCrossed.forEach(([i, j]) => {
-      const tile = new PIXI.Graphics();
-      const offsetX = marginX + i * this.options.gridSizePx;
-      const offsetY = marginY + j * this.options.gridSizePx;
-      tile.beginFill((i === i0 && j === j0) ? 0xffff00 : color);
-      tile.drawRect(0, 0, this.options.gridSizePx, this.options.gridSizePx);
-      tile.endFill();
-      tile.alpha = 0.5;
-      tile.position.set(offsetX, offsetY);
-      this.engine.ui.objects.movementPreviews[moveIndex].push(tile);
-      this.engine.ui.containers.map.addChild(tile);
-    });
-
-    this.engine.ui.objects.controls.btnCancel.alpha = 1;
-    if (moveIndex === 1) {
-      this.engine.ui.objects.controls.btnConfirm.alpha = 1;
-    }
-  }
-
-  planMove(options) {
+  computePlannedMovementData(moveIndex, options) {
     let diceValue = this.gameState.get(`diceValue[${options.dice}]`);
-    if (diceValue === 0) {
-      return;
-    }
-
-    // In general, we'll be modifying the first move.
-    let moveIndex = 0;
-    // To move onto second move, the first move must have been made by another dice.
-    if (this.data.movement.moves[0].diceIndex === (1 - options.dice)) {
-      // And player needs to be alive OR flying after the first move.
-      if (this.data.movement.moves[0].alive || this.data.movement.moves[0].direction === options.direction) {
-        // And player must not have already tried the same direction and ended with death.
-        if (this.data.movement.moves[1].direction !== options.direction) {
-          // Trying a new direction.
-          moveIndex = 1;
-        } else if (this.data.movement.moves[1].alive) {
-          // Trying the same direction and still alive, no change needed.
-          return;
-        }
-      }
-    }
-
-    // If changing first movement, delete second movement data.
-    if (moveIndex === 0) {
-      this.clearMovement(1);
-    }
 
     // Determine starting location.
     let startingLocation;
@@ -380,24 +370,46 @@ export default class RwbUiGame {
       tilesCrossed.push([i, j]);
     }
 
-    // Set new data.
+    // Save local movement data.
     this.data.movement.moves[moveIndex] = {
       alive: !(oob || drowned),
       diceIndex: oob ? -1 : options.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
       direction: options.direction,
+      flying,
       tilesCrossed,
       target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
     };
+  }
 
-    // Redraw movement previews.
-    this.clearMovementPreview(0);
-    if (!flying) {
-      this.drawMovementPreview(0);
+  planMove(options) {
+    if (this.gameState.get(`diceValue[${options.dice}]`) === 0) {
+      return;
     }
-    if (moveIndex === 1) {
-      this.clearMovementPreview(1);
-      this.drawMovementPreview(1);
+
+    // In general, we'll be modifying the first move.
+    let moveIndex = 0;
+    // To move onto second move, the first move must have been made by another dice.
+    if (this.data.movement.moves[0].diceIndex === (1 - options.dice)) {
+      // And player needs to be alive OR flying after the first move.
+      if (this.data.movement.moves[0].alive || this.data.movement.moves[0].direction === options.direction) {
+        // And player must not have already tried the same direction and ended with death.
+        if (this.data.movement.moves[1].direction !== options.direction) {
+          // Trying a new direction.
+          moveIndex = 1;
+        } else if (this.data.movement.moves[1].alive) {
+          // Trying the same direction and still alive, no change needed.
+          return;
+        }
+      }
     }
+
+    // If changing first movement, delete second movement data.
+    if (moveIndex === 0) {
+      this.clearMovement(1);
+    }
+
+    this.computePlannedMovementData(moveIndex, options);
+    this.drawMovementPreviews(moveIndex);
   }
 
   moveRobot() {

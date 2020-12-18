@@ -311,16 +311,17 @@ export default class RwbUiEngine {
       tData.progress = Math.min(1, tData.step / tData.steps);
 
       // Handle translate and scale.
-      for (const [key, attrs] of Object.entries({ translate: ['x', 'y'], scale: ['width', 'height'] })) {
+      Object.entries({ translate: ['x', 'y'], scale: ['width', 'height'] }).forEach(([key, attrs]) => {
         const tDataProp = tData[key];
-        if (tDataProp !== null) {
-          for (const attr of attrs) {
-            if (Object.prototype.hasOwnProperty.call(tDataProp, attr)) {
-              tObj[attr] = tDataProp.from[attr] + tData.progress * (tDataProp[attr] - tDataProp.from[attr]);
-            }
-          }
+        if (tDataProp === null) {
+          return;
         }
-      }
+        attrs.forEach((attr) => {
+          if (Object.prototype.hasOwnProperty.call(tDataProp, attr)) {
+            tObj[attr] = tDataProp.from[attr] + tData.progress * (tDataProp[attr] - tDataProp.from[attr]);
+          }
+        });
+      });
 
       // Handle rotate
       if (tData.rotate !== null) {
