@@ -149,26 +149,26 @@ export default class RwbUiGame {
     );
   }
 
-  computePlannedMovementData(moveIndex, options) {
-    let diceValue = this.store.get(`diceValue[${options.dice}]`);
+  computePlannedMovementData(moveIndex, params) {
+    let diceValue = this.store.get(`diceValue[${params.dice}]`);
 
     // Determine starting location.
     let startingLocation;
     let flying = false;
     if (moveIndex === 0) {
       startingLocation = data.movement.start;
-    } else if (options.direction === data.movement.moves[0].direction) {
+    } else if (params.direction === data.movement.moves[0].direction) {
       // Continued move (fly).
       startingLocation = data.movement.start;
-      diceValue += this.store.get(`diceValue[${1 - options.dice}]`);
+      diceValue += this.store.get(`diceValue[${1 - params.dice}]`);
       flying = true;
     } else {
       startingLocation = data.movement.moves[0].target;
     }
 
     // Convert movement into x/y increment.
-    const axis = (options.direction === 'Left' || options.direction === 'Right') ? 0 : 1;
-    const increment = (options.direction === 'Down' || options.direction === 'Right') ? 1 : -1;
+    const axis = (params.direction === 'Left' || params.direction === 'Right') ? 0 : 1;
+    const increment = (params.direction === 'Down' || params.direction === 'Right') ? 1 : -1;
 
     // Check if movement is legal.
     const mapTilesData = this.store.get('mapTiles');
@@ -199,8 +199,8 @@ export default class RwbUiGame {
     // Save local movement data.
     data.movement.moves[moveIndex] = {
       alive: !(oob || drowned),
-      diceIndex: oob ? -1 : options.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
-      direction: options.direction,
+      diceIndex: oob ? -1 : params.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
+      direction: params.direction,
       flying,
       tilesCrossed,
       target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
@@ -364,8 +364,21 @@ export default class RwbUiGame {
         btn.on('click', () => {
           this.engine.dispatchEvent(new CustomEvent(btnText.toLowerCase(), {}));
         });
+        btn.on('mouseout', () => { this.engine.clearTooltips(); });
         this.engine.ui.objects[key][`btn${btnText}`] = btn;
         this.engine.ui.containers[key].addChild(btn);
+      });
+    });
+    this.engine.ui.objects.controls.btnConfirm.on('mouseover', () => {
+      this.engine.attachTooltip('controls.btnConfirm', {
+        text: 'Click to confirm movement.\n\n'
+          + '(Shortcuts: Z or Numpad Enter)',
+      });
+    });
+    this.engine.ui.objects.controls.btnCancel.on('mouseover', () => {
+      this.engine.attachTooltip('controls.btnCancel', {
+        text: 'Click to remove movement preview.\n\n'
+          + '(Shortcuts: C or Numpad 0)',
       });
     });
 
@@ -373,6 +386,15 @@ export default class RwbUiGame {
     // Two dice, init at 0.
     [0, 1].forEach((i) => {
       const diceFace = new PIXI.Sprite(this.engine.textures['dice-face-0']);
+      diceFace.interactive = true;
+      diceFace.on('mouseover', () => {
+        this.engine.attachTooltip(`diceFaces[${i}]`, {
+          text: 'Click arrows around any dice to preview moves.\n\n'
+            + '(Shortcuts: Arrow keys OR Numpad OR W/A/S/D)\n'
+            + '(X OR Numpad 5 can be used to toggle dice)',
+        });
+      });
+      diceFace.on('mouseout', () => { this.engine.clearTooltips(); });
       this.engine.ui.objects.diceFaces.push(diceFace);
       this.engine.ui.containers.controls.addChild(diceFace);
 
@@ -494,22 +516,22 @@ export default class RwbUiGame {
     });
   }
 
-  planMove(options) {
+  planMove(params) {
     if (!this.controlsEnabled()) {
       return;
     }
-    if (this.store.get(`diceValue[${options.dice}]`) === 0) {
+    if (this.store.get(`diceValue[${params.dice}]`) === 0) {
       return;
     }
 
     // In general, we'll be modifying the first move.
     let moveIndex = 0;
     // To move onto second move, the first move must have been made by another dice.
-    if (data.movement.moves[0].diceIndex === (1 - options.dice)) {
+    if (data.movement.moves[0].diceIndex === (1 - params.dice)) {
       // And player needs to be alive OR flying after the first move.
-      if (data.movement.moves[0].alive || data.movement.moves[0].direction === options.direction) {
+      if (data.movement.moves[0].alive || data.movement.moves[0].direction === params.direction) {
         // And player must not have already tried the same direction and ended with death.
-        if (data.movement.moves[1].direction !== options.direction) {
+        if (data.movement.moves[1].direction !== params.direction) {
           // Trying a new direction.
           moveIndex = 1;
         } else if (data.movement.moves[1].alive) {
@@ -524,7 +546,7 @@ export default class RwbUiGame {
       this.clearMovement(1);
     }
 
-    this.computePlannedMovementData(moveIndex, options);
+    this.computePlannedMovementData(moveIndex, params);
     this.drawMovementPreviews();
 
     // In addition, guess player intention on next active keyboard dice.
@@ -557,6 +579,18 @@ export default class RwbUiGame {
     // dispatch diceMoved on move end
     // dispatch playerMoved on both dice moved
     // this.uiEngine.modules.game.moveRobotStep()
+    // const currentActivePlayer = this.store.get('currentActivePlayer');
+
+    // this.engine.addTransition('playerPieces[]', {
+    //   translate: { y: this.options.my + 4 * this.options.infoTextSize },
+    //   cb: () => {
+    //     this.engine.updateUiMessage('playerTurn', {
+    //       x: this.options.mx + this.options.board.widthWP / 2,
+    //       y: this.options.my + 2.5 * this.options.infoTextSize,
+    //       fontSize: this.options.infoTextSize,
+    //     });
+    //   },
+    // });
 
     // After animations, update player position to target position.
     const [x, y] = data.movement.moves[1].target;
@@ -805,11 +839,11 @@ export default class RwbUiGame {
     }
   }
 
-  showGameOverMessage(options) {
+  showGameOverMessage(params) {
     const center = this.options.mx + this.options.board.widthWP / 2;
     const middle = this.options.my + this.options.board.heightWP / 2;
     this.engine.updateUiMessage('gameOver', {
-      ...options,
+      ...params,
       x: center,
       y: middle,
     });

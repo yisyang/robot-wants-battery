@@ -16,7 +16,7 @@ export default class RwbApp {
       muted: false,
       controllersAllowed: [0, 1],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
-      waterTileChances: [0.05, 0.15, 0.21, 0.30], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
+      waterTileChances: [0.05, 0.15, 0.22, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
     };
     Object.assign(this.gameOptions, gameOptions);
@@ -204,14 +204,14 @@ export default class RwbApp {
     this.uiEngine.modules.game.nextTurn();
   }
 
-  updateCurrentPlayerData(data) {
+  updateCurrentPlayerData(params) {
     const currentActivePlayer = this.store.get('currentActivePlayer');
-    this.store.set(`players[${currentActivePlayer}].alive`, data.alive);
-    this.store.set(`players[${currentActivePlayer}].x`, data.location.x);
-    this.store.set(`players[${currentActivePlayer}].y`, data.location.y);
+    this.store.set(`players[${currentActivePlayer}].alive`, params.alive);
+    this.store.set(`players[${currentActivePlayer}].x`, params.location.x);
+    this.store.set(`players[${currentActivePlayer}].y`, params.location.y);
 
     // Trigger winning message.
-    if (data.location.x === this.gameOptions.endLocation.x && data.location.y === this.gameOptions.endLocation.y) {
+    if (params.location.x === this.gameOptions.endLocation.x && params.location.y === this.gameOptions.endLocation.y) {
       this.updateWinner(currentActivePlayer);
     }
   }

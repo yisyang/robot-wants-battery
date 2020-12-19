@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { get as deepGet } from 'lodash-es';
+import { get as deepGet, debounce } from 'lodash-es';
 import RwbUiGame from './rwb-ui-game';
 import RwbUiMenu from './rwb-ui-menu';
 
@@ -37,6 +37,7 @@ export default class RwbUiEngine {
         messages: null,
         menuMain: null,
         menuPause: null,
+        tooltips: null,
       },
       // Pixi sprites as JS objects.
       objects: {
@@ -76,6 +77,7 @@ export default class RwbUiEngine {
         diceFaces: [],
         playerPieces: [],
         tiles: [],
+        tooltips: [],
       },
       // References to objects currently undergoing transition.
       transition: {},
@@ -93,6 +95,8 @@ export default class RwbUiEngine {
       game: new RwbUiGame(this, store),
       menu: new RwbUiMenu(this, store),
     };
+
+    this.showTooltipDebounced = debounce(this.showTooltip, 1800);
 
     this.handleEvents();
   }
@@ -112,7 +116,50 @@ export default class RwbUiEngine {
     return { width: e[`${a}Width`], height: e[`${a}Height`] };
   }
 
-  addTransition(element, options) {
+  showTooltip(element, params) {
+    const tObj = deepGet(this.ui.objects, element);
+    let xBaseline = tObj.x;
+    let yBaseline = tObj.y;
+
+    const tooltipText = new PIXI.Text(params.text || '');
+    tooltipText.anchor.set(0.5, 0.5);
+    tooltipText.style.fill = params.fill || 0x000000;
+    tooltipText.style.fontSize = params.fontSize || 3 * this.options.du;
+
+    const paddingX = 0.5 * tooltipText.width + 5 * this.options.du;
+    const paddingY = 0.5 * tooltipText.height + 5 * this.options.du;
+    xBaseline = Math.max(paddingX, Math.min(xBaseline, this.options.width - paddingX));
+    yBaseline = Math.max(paddingY, Math.min(yBaseline, this.options.height - paddingY));
+    tooltipText.position.set(xBaseline, yBaseline);
+
+    const tooltipBg = new PIXI.Graphics();
+    tooltipBg.beginFill(params.bgFill || 0xffffff);
+    tooltipBg.lineStyle(0.5 * this.options.du, params.fill || 0x000000);
+    tooltipBg.drawRect(0, 0, tooltipText.width + 8 * this.options.du, tooltipText.height + 8 * this.options.du);
+    tooltipBg.endFill();
+    const bgX = xBaseline - tooltipBg.width / 2;
+    const bgY = yBaseline - tooltipBg.height / 2;
+    tooltipBg.position.set(bgX, bgY);
+
+    this.ui.containers.tooltips.addChild(tooltipBg);
+    this.ui.containers.tooltips.addChild(tooltipText);
+    this.ui.objects.tooltips.push(tooltipBg);
+    this.ui.objects.tooltips.push(tooltipText);
+  }
+
+  attachTooltip(element, params) {
+    this.showTooltipDebounced(element, params);
+  }
+
+  clearTooltips() {
+    this.showTooltipDebounced.cancel();
+    this.ui.objects.tooltips.forEach((tooltip) => {
+      this.ui.containers.tooltips.removeChild(tooltip);
+    });
+    this.ui.objects.tooltips = [];
+  }
+
+  addTransition(element, params) {
     const tData = {
       cb: null,
       element, // String of subpath from ui.objects.
@@ -122,7 +169,7 @@ export default class RwbUiEngine {
       rotate: null,
       step: 0,
       steps: 100,
-      ...options,
+      ...params,
     };
     const tObj = deepGet(this.ui.objects, tData.element);
     // Perform initial sanitizations.
@@ -149,23 +196,23 @@ export default class RwbUiEngine {
     this.options.du = 1 / 100 * Math.min(this.options.width, this.options.height);
   }
 
-  createContainerRectangle(name, data) {
+  createContainerRectangle(name, params) {
     const rect = new PIXI.Graphics();
-    rect.beginFill(data.fill || 0x000000);
+    rect.beginFill(params.fill || 0x000000);
     rect.drawRect(0, 0, 1, 1);
     rect.endFill();
-    this.ui.objects[data.container || 'base'][name] = rect;
-    this.ui.containers[data.container || 'base'].addChild(rect);
+    this.ui.objects[params.container || 'base'][name] = rect;
+    this.ui.containers[params.container || 'base'].addChild(rect);
   }
 
-  createUiMessage(name, options = {}) {
+  createUiMessage(name, params = {}) {
     const defaultOptions = {
       fill: 0xf0f0f0,
       align: 'left',
       container: 'messages',
     };
-    const extendedOptions = { ...defaultOptions, ...options };
-    const message = new PIXI.Text(options.text || '');
+    const extendedOptions = { ...defaultOptions, ...params };
+    const message = new PIXI.Text(params.text || '');
     this.ui.objects.messages[name] = message;
     this.ui.containers[extendedOptions.container].addChild(message);
     this.updateUiMessage(name, extendedOptions);
@@ -209,10 +256,10 @@ export default class RwbUiEngine {
       this.textures = res.rwb.textures;
 
       // Make multi-layer stage to ensure some sprites can display above others.
-      for (const container of ['base', 'map', 'sprites', 'controls', 'messages', 'menuPause', 'menuMain']) {
+      ['base', 'map', 'sprites', 'controls', 'messages', 'menuPause', 'menuMain', 'tooltips'].forEach((container) => {
         this.ui.containers[container] = new PIXI.Container();
         this.renderer.stage.addChild(this.ui.containers[container]);
-      }
+      });
 
       // Load sounds
       // const tempLoader = new PIXI.Loader();
@@ -353,29 +400,29 @@ export default class RwbUiEngine {
     }
   }
 
-  updateUiMessage(name, options) {
+  updateUiMessage(name, params) {
     const message = this.ui.objects.messages[name];
-    if (Object.prototype.hasOwnProperty.call(options, 'align')) {
-      message.style.align = options.align;
-      if (options.align === 'left') {
+    if (Object.prototype.hasOwnProperty.call(params, 'align')) {
+      message.style.align = params.align;
+      if (params.align === 'left') {
         message.anchor.set(0, 0.5);
-      } else if (options.align === 'right') {
+      } else if (params.align === 'right') {
         message.anchor.set(1.0, 0.5);
       } else {
         message.anchor.set(0.5, 0.5);
       }
     }
-    if (Object.prototype.hasOwnProperty.call(options, 'fill')) {
-      message.style.fill = options.fill;
+    if (Object.prototype.hasOwnProperty.call(params, 'fill')) {
+      message.style.fill = params.fill;
     }
-    if (Object.prototype.hasOwnProperty.call(options, 'fontSize')) {
-      message.style.fontSize = options.fontSize;
+    if (Object.prototype.hasOwnProperty.call(params, 'fontSize')) {
+      message.style.fontSize = params.fontSize;
     }
-    if (Object.prototype.hasOwnProperty.call(options, 'text')) {
-      message.text = options.text;
+    if (Object.prototype.hasOwnProperty.call(params, 'text')) {
+      message.text = params.text;
     }
-    if (Object.prototype.hasOwnProperty.call(options, 'x') && Object.prototype.hasOwnProperty.call(options, 'y')) {
-      message.position.set(options.x, options.y);
+    if (Object.prototype.hasOwnProperty.call(params, 'x') && Object.prototype.hasOwnProperty.call(params, 'y')) {
+      message.position.set(params.x, params.y);
     }
   }
 }

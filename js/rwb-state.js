@@ -1,6 +1,8 @@
 /* eslint-disable class-methods-use-this */
 
-import { get as deepGet, has as deepHas, set as deepSet } from 'lodash-es';
+import {
+  cloneDeep as deepClone, get as deepGet, has as deepHas, set as deepSet,
+} from 'lodash-es';
 
 // Game state contains ALL state info for the game in progress,
 // and can be used to re-render the game board.
@@ -44,7 +46,7 @@ export default class RwbState {
   }
 
   get(key, fallback = null) {
-    return deepGet(state, key, fallback);
+    return deepClone(deepGet(state, key, fallback));
   }
 
   has(key) {
