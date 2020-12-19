@@ -67,11 +67,11 @@ export default class RwbApp {
         }
       });
       this.uiEngine.addEventListener('pause', () => {
-        this.store.set('gameStatus', 2);
+        this.store.set('gamePaused', true);
         this.uiEngine.refreshDisplay();
       });
       this.uiEngine.addEventListener('resume', () => {
-        this.store.set('gameStatus', 1);
+        this.store.set('gamePaused', false);
         this.uiEngine.refreshDisplay();
       });
       this.uiEngine.addEventListener('abandon', () => {
@@ -156,6 +156,8 @@ export default class RwbApp {
     );
     this.store.savePersistedState();
     this.store.set('gameStatus', 1);
+    this.store.set('gamePaused', false);
+    this.store.set('gameWon', false);
     this.generateBoard();
     this.uiEngine.modules.game.startGame();
     this.uiEngine.playSound('start');
@@ -169,7 +171,13 @@ export default class RwbApp {
     const totalPlayersPlayable = playersData.map((e) => (e.alive && e.playable ? 1 : 0)).reduce((a, b) => a + b);
     // Game ended.
     if (totalPlayersPlayable === 0) {
-      this.store.set('status', 3);
+      this.store.set('gameStatus', 2);
+      if (!this.store.get('gameWon')) {
+        this.uiEngine.modules.game.showGameOverMessage({
+          text: 'Game Over',
+          fill: 0xff0000,
+        });
+      }
       return;
     }
 
@@ -202,18 +210,29 @@ export default class RwbApp {
     this.store.set(`players[${currentActivePlayer}].x`, data.location.x);
     this.store.set(`players[${currentActivePlayer}].y`, data.location.y);
 
-    // TODO: Trigger winning message.
-    if (data.location.x === this.gameOptions.endLocation.x && data.location.x === this.gameOptions.endLocation.x) {
-      const playerName = this.store.get(`players.${currentActivePlayer}.name`);
-      console.log(`${playerName} WINS!`);
-      this.store.set(`players[${currentActivePlayer}].playable`, false);
-      this.store.set('highScore', Math.max(this.store.get('currentScore'), this.store.get('highScore')));
-      this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.store.get('highScore')}` });
-      this.store.savePersistedState();
-
-      // Temporary: put winning player pieces at the right location in case there is no next turn.
-      this.uiEngine.modules.game.clearMovement();
-      this.uiEngine.modules.game.repositionPlayerPieces();
+    // Trigger winning message.
+    if (data.location.x === this.gameOptions.endLocation.x && data.location.y === this.gameOptions.endLocation.y) {
+      this.updateWinner(currentActivePlayer);
     }
+  }
+
+  updateWinner(currentActivePlayer) {
+    const playerName = this.store.get(`players.${currentActivePlayer}.name`);
+
+    // Save high score.
+    this.store.set(`players[${currentActivePlayer}].playable`, false);
+    this.store.set('highScore', Math.max(this.store.get('currentScore'), this.store.get('highScore')));
+    this.uiEngine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.store.get('highScore')}` });
+    this.store.savePersistedState();
+
+    // Play winning sound.
+    this.uiEngine.playSound('win');
+
+    // Display winning message.
+    this.uiEngine.modules.game.showGameOverMessage({
+      text: `${playerName} Wins!`,
+      fill: this.store.get('gameOptions.playerColors')[currentActivePlayer],
+    });
+    this.store.set('gameWon', true);
   }
 }

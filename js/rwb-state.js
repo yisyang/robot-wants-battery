@@ -61,7 +61,9 @@ export default class RwbState {
       ...this.defaultState,
       currentTurn: 0,
       currentActivePlayer: -1, // Hack
-      gameStatus: 0, // 0: Not started, 1: Started, 2: Paused, 3: Done
+      gameStatus: 0, // 0: Not started, 1: Started, 2: Done
+      gamePaused: false,
+      gameWon: false,
       mapSeed: '',
       mapTiles: [],
     });

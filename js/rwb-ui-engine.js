@@ -216,7 +216,7 @@ export default class RwbUiEngine {
 
       // Load sounds
       // const tempLoader = new PIXI.Loader();
-      ['die', 'frightened', 'ka', 'start', 'wa'].forEach((sound) => {
+      ['die', 'frightened', 'ka', 'start', 'wa', 'win'].forEach((sound) => {
         this.renderer.loader.add(sound, `./sounds/${sound}.mp3`);
       });
       return new Promise((resolve, reject) => {
@@ -286,7 +286,7 @@ export default class RwbUiEngine {
       // In menu.
       this.ui.containers.base.visible = true;
       this.ui.containers.menuMain.visible = true;
-    } else if (this.store.get('gameStatus') === 2) {
+    } else if (this.store.get('gamePaused')) {
       // Paused game.
       this.ui.containers.base.visible = true;
       this.ui.containers.menuPause.visible = true;

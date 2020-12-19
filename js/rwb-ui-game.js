@@ -44,11 +44,11 @@ export default class RwbUiGame {
     }
   }
 
-  clearMovement(diceIndex = null) {
+  clearMovement(moveIndex = null) {
     // Remove preview overlay tiles.
     [0, 1].forEach((key) => {
       // noinspection JSIncompatibleTypesComparison
-      if (diceIndex === null || diceIndex === key) {
+      if (moveIndex === null || moveIndex === key) {
         this.clearMovementPreviews(key);
         // Reset local movement view data.
         data.movement.moves[key] = {
@@ -205,6 +205,10 @@ export default class RwbUiGame {
       tilesCrossed,
       target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
     };
+  }
+
+  controlsEnabled() {
+    return this.store.get('gameStatus') === 1 && !this.store.get('gamePaused');
   }
 
   countPlayersAtPlayerLocation(i) {
@@ -397,6 +401,9 @@ export default class RwbUiGame {
   initKeyboardEvents() {
     // Register window keyboard events.
     window.addEventListener('keydown', (e) => {
+      if (!this.controlsEnabled()) {
+        return;
+      }
       let direction = null;
       switch (e.code) {
         case 'Numpad8':
@@ -439,8 +446,24 @@ export default class RwbUiGame {
           return;
       }
       if (direction !== null && data.canMove) {
-        // Save current active dice and emit directional event.
+        // Get active dice based on default and last moved dice.
         data.activeKeyboardDice = (data.activeKeyboardDice === 1 ? 1 : 0);
+        // Second-guess player intention.
+        if (data.movement.moves[0].diceIndex === data.activeKeyboardDice
+          && data.movement.moves[0].direction === direction
+        ) {
+          // If current dice has moved in first movement and we're attempting the same direction.
+          // Then the player probably intends to use the other dice to fly.
+          data.activeKeyboardDice = 1 - data.activeKeyboardDice;
+        } else if (data.movement.moves[1].diceIndex === data.activeKeyboardDice
+          && data.movement.moves[1].direction === direction
+        ) {
+          // Player has used current dice and direction for second movement.
+          // A repeat probably means that the player wants to do this for first movement instead.
+          this.clearMovement();
+        }
+
+        // Save current active dice and emit directional event.
         this.engine.dispatchEvent(new CustomEvent('planMove', {
           detail: {
             dice: data.activeKeyboardDice,
@@ -464,9 +487,17 @@ export default class RwbUiGame {
     this.engine.createUiMessage('playerTurn', { align: 'center' });
     this.engine.createUiMessage('gameScore', { align: 'right' });
     this.engine.createUiMessage('hiScore', { align: 'right' });
+    this.engine.createUiMessage('gameOver', {
+      align: 'center',
+      fill: 0x0000ff,
+      fontSize: 2 * this.options.gridSizePx,
+    });
   }
 
   planMove(options) {
+    if (!this.controlsEnabled()) {
+      return;
+    }
     if (this.store.get(`diceValue[${options.dice}]`) === 0) {
       return;
     }
@@ -496,16 +527,22 @@ export default class RwbUiGame {
     this.computePlannedMovementData(moveIndex, options);
     this.drawMovementPreviews();
 
-    // In addition, automatically toggle other dice as next activeKeyboardDice on valid moves.
+    // In addition, guess player intention on next active keyboard dice.
     if (data.activeKeyboardDice !== null) {
+      // First move and valid move. Next action will likely be other dice.
       if (moveIndex === 0 && data.movement.moves[0].alive) {
         data.activeKeyboardDice = 1 - data.activeKeyboardDice;
-        this.highlightActiveKeyboardDice();
       }
+      // Player is flying. Likely no more next move.
+      if (moveIndex === 1 && !data.movement.moves[0].alive) {
+        data.activeKeyboardDice = null;
+      }
+      this.highlightActiveKeyboardDice();
     }
   }
 
   moveRobot() {
+    // Must have both movements issued before moving.
     if (data.movement.moves[1].direction === null) {
       return;
     }
@@ -514,7 +551,6 @@ export default class RwbUiGame {
     data.activeKeyboardDice = null;
     this.highlightActiveKeyboardDice();
 
-
     // TODO: Move player piece slowly, 1 square at a time, and check for death.
     // Rotate on death.
     // dispatch playerLost on death
@@ -522,7 +558,7 @@ export default class RwbUiGame {
     // dispatch playerMoved on both dice moved
     // this.uiEngine.modules.game.moveRobotStep()
 
-    // If player is alive, update player position to target position.
+    // After animations, update player position to target position.
     const [x, y] = data.movement.moves[1].target;
     this.engine.dispatchEvent(new CustomEvent('turnEnded', {
       detail: {
@@ -707,12 +743,14 @@ export default class RwbUiGame {
     const right = this.options.mx + this.options.board.widthWP - this.options.infoTextSize;
     const row1 = this.options.my + this.options.infoTextSize;
     const row2 = this.options.my + 2.5 * this.options.infoTextSize;
+    const middle = this.options.my + this.options.board.heightWP / 2;
     this.engine.updateUiMessage('mapDifficulty', { x: left, y: row1, fontSize: this.options.infoTextSize });
     this.engine.updateUiMessage('mapSeed', { x: left, y: row2, fontSize: this.options.infoTextSize });
     this.engine.updateUiMessage('gameTurn', { x: center, y: row1, fontSize: this.options.infoTextSize });
     this.engine.updateUiMessage('playerTurn', { x: center, y: row2, fontSize: this.options.infoTextSize });
     this.engine.updateUiMessage('gameScore', { x: right, y: row1, fontSize: this.options.infoTextSize });
     this.engine.updateUiMessage('hiScore', { x: right, y: row2, fontSize: this.options.infoTextSize });
+    this.engine.updateUiMessage('gameOver', { x: center, y: middle, fontSize: 2 * this.options.gridSizePx });
   }
 
   repositionMapTiles() {
@@ -767,12 +805,27 @@ export default class RwbUiGame {
     }
   }
 
+  showGameOverMessage(options) {
+    const center = this.options.mx + this.options.board.widthWP / 2;
+    const middle = this.options.my + this.options.board.heightWP / 2;
+    this.engine.updateUiMessage('gameOver', {
+      ...options,
+      x: center,
+      y: middle,
+    });
+
+    // Also make sure all player pieces are positioned correctly after previous  movement.
+    this.clearMovement();
+    this.repositionPlayerPieces();
+  }
+
   startGame() {
     const difficultyLabel = this.store.get('gameOptions.difficultyLabels')[this.store.get('mapDifficulty')];
     this.clearGameMap();
     this.engine.updateUiMessage('mapDifficulty', { text: `Difficulty: ${difficultyLabel}` });
     this.engine.updateUiMessage('mapSeed', { text: `Map Seed: ${this.store.get('mapSeed')}` });
     this.engine.updateUiMessage('hiScore', { text: `Hi-Score: ${this.store.get('highScore')}` });
+    this.engine.updateUiMessage('gameOver', { text: '' });
     this.createGameTiles(this.store.get('mapTiles'));
     this.createPlayerPieces(this.store.get('playersCount'));
     data.canMove = false;
