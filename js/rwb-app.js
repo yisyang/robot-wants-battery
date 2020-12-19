@@ -181,27 +181,44 @@ export default class RwbApp {
       return;
     }
 
-    // Increment turn or active player
+    // Increment turn or active player index.
     let currentTurn = this.store.get('currentTurn');
-    let currentActivePlayer = this.store.get('currentActivePlayer') + 1;
-    while (currentActivePlayer < this.store.get('playersCount') && !playersData[currentActivePlayer].alive) {
-      currentActivePlayer += 1;
-    }
-    if (currentActivePlayer >= this.store.get('playersCount')) {
+    const currentActivePlayer = this.store.get('currentActivePlayer');
+    const nextActivePlayer = this.getClosestActivePlayer(currentActivePlayer + 1);
+    // Increase turn as needed.
+    if (nextActivePlayer <= currentActivePlayer) {
       currentTurn += 1;
-      currentActivePlayer = 0;
       this.store.set('currentTurn', currentTurn);
       const scoreReductionMultiplier = 2 ** (3 - this.store.get('mapDifficulty'));
       this.store.set('currentScore', Math.max(0,
         this.gameOptions.maxScore - currentTurn * scoreReductionMultiplier));
     }
-    this.store.set('currentActivePlayer', currentActivePlayer);
+    this.store.set('currentActivePlayer', nextActivePlayer);
 
     [0, 1].forEach((i) => {
       this.store.set(`diceValue[${i}]`, Math.floor(Math.random() * 6) + 1);
     });
 
     this.uiEngine.modules.game.nextTurn();
+  }
+
+  /**
+   * Get closest active player index, including current.
+   *
+   * @param {Number} playerIndex
+   * @returns {*}
+   */
+  getClosestActivePlayer(playerIndex) {
+    const playersData = this.store.get('players');
+    const playersCount = this.store.get('playersCount');
+    for (let i = 0; i < playersCount; i++) {
+      const pi = (playerIndex + i) % playersCount;
+      if (playersData[pi].alive && playersData[pi].playable) {
+        // Player is both alive and playable.
+        return pi;
+      }
+    }
+    throw Error('Error: Unable to get next active player.');
   }
 
   updateCurrentPlayerData(params) {
@@ -228,11 +245,13 @@ export default class RwbApp {
     // Play winning sound.
     this.uiEngine.playSound('win');
 
-    // Display winning message.
-    this.uiEngine.modules.game.showGameOverMessage({
-      text: `${playerName} Wins!`,
-      fill: this.store.get('gameOptions.playerColors')[currentActivePlayer],
-    });
-    this.store.set('gameWon', true);
+    // Display winning message to first winner.
+    if (!this.store.get('gameWon')) {
+      this.uiEngine.modules.game.showGameOverMessage({
+        text: `${playerName} Wins!`,
+        fill: this.store.get('gameOptions.playerColors')[currentActivePlayer],
+      });
+      this.store.set('gameWon', true);
+    }
   }
 }

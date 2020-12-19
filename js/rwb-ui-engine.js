@@ -402,6 +402,9 @@ export default class RwbUiEngine {
 
   updateUiMessage(name, params) {
     const message = this.ui.objects.messages[name];
+    if (Object.prototype.hasOwnProperty.call(params, 'alpha')) {
+      message.alpha = params.alpha;
+    }
     if (Object.prototype.hasOwnProperty.call(params, 'align')) {
       message.style.align = params.align;
       if (params.align === 'left') {

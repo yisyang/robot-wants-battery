@@ -844,6 +844,7 @@ export default class RwbUiGame {
     const middle = this.options.my + this.options.board.heightWP / 2;
     this.engine.updateUiMessage('gameOver', {
       ...params,
+      alpha: 0.9,
       x: center,
       y: middle,
     });
