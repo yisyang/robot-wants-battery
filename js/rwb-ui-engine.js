@@ -305,6 +305,7 @@ export default class RwbUiEngine {
 
   playSound(name, loop = false) {
     if (!this.options.muted) {
+      // Note sound data is just an HTML5 audio element.
       if (!Object.hasOwnProperty.call(this.soundsPlaying, name)) {
         const soundLoop = { ...this.sounds[name] };
         soundLoop.data.loop = loop;
@@ -396,7 +397,8 @@ export default class RwbUiEngine {
 
   stopSound(name) {
     if (Object.hasOwnProperty.call(this.soundsPlaying, name)) {
-      this.soundsPlaying[name].data.stop();
+      this.soundsPlaying[name].data.pause();
+      this.soundsPlaying[name].data.currentTime = 0;
     }
   }
 

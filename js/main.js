@@ -29,8 +29,8 @@ function startGame(muted = false) {
 window.onload = () => {
   // Just being lazy here with the hardcoded initial screen...
   // Gets initial user-DOM interaction to bypass Chrome's forced-mute.
-  const btn1 = createButton('Play', '200px', '50px', '50px');
-  const btn2 = createButton('Play Muted', '200px', '50px', '50px');
+  const btn1 = createButton('Play', '200px', '50px', '50px auto');
+  const btn2 = createButton('Play Muted', '200px', '50px', '50px auto');
 
   const divHolder = document.createElement('div');
   divHolder.id = 'pregame-buttons';
@@ -47,13 +47,21 @@ window.onload = () => {
   divOverlay.style.backgroundColor = 'rgba(48, 48, 48, 0.95)';
   divOverlay.style.textAlign = 'center';
   divOverlay.style.color = '#ffffff';
-  divOverlay.style.fontSize = '24px';
-  divOverlay.innerText = 'Playable but work in progress.';
+  divOverlay.style.fontSize = '30px';
+  divOverlay.innerText = 'Robot Wants Battery';
+
+  const divDisclaimer = document.createElement('div');
+  divDisclaimer.style.fontSize = '12px';
+  divDisclaimer.innerText = 'Disclaimer: PAC-MAN is a trademark of Bandai Namco Entertainment Inc.\n'
+  + 'Robot Wants Battery is not affiliated with Bandai Namco Entertainment Inc. \n'
+  + 'Some of the sounds in this game are remakes of the original PAC-MAN game, \n'
+  + 'and are available to download from: https://scratch.mit.edu/projects/134538654/';
 
   // Stack elements.
   divHolder.appendChild(divOverlay);
   divOverlay.appendChild(btn1);
   divOverlay.appendChild(btn2);
+  divOverlay.appendChild(divDisclaimer);
   document.getElementById('game-holder').appendChild(divHolder);
 
   // Start game!
