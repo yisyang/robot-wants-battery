@@ -1,9 +1,14 @@
 import * as PIXI from 'pixi.js';
+import { debounce } from 'lodash-es';
 
 // Local view data.
 const data = {
   activeKeyboardDice: 0,
   canMove: false,
+  width: null,
+  height: null,
+  board: {},
+  controls: {},
   isMoving: false,
   isFlying: false,
   movement: {
@@ -21,18 +26,13 @@ export default class RwbUiGame {
     this.engine = engine;
     this.store = store;
 
-    this.options = {
-      width: null,
-      height: null,
-      board: {},
-      controls: {},
-    };
+    this.confirmAiMoveDebounced = debounce(this.confirmAiMove, 500);
   }
 
   clearGameMap() {
     // Clear map and sprites containers.
-    this.engine.ui.objects.tiles.forEach((row) => {
-      row.forEach((tile) => {
+    this.engine.ui.objects.tiles.forEach((column) => {
+      column.forEach((tile) => {
         this.engine.ui.containers.map.removeChild(tile);
       });
     });
@@ -111,6 +111,13 @@ export default class RwbUiGame {
     this.engine.ui.objects.controls.btnConfirm.alpha = 0.3;
   }
 
+  clearProbabilityHints() {
+    this.engine.ui.objects.probabilityHints.forEach((tile) => {
+      this.engine.ui.containers.map.removeChild(tile);
+    });
+    data.displayingProbabilityHints = false;
+  }
+
   computeBaseGridSize() {
     const gridSizePxX = this.engine.options.width / (this.engine.options.gridCountX + 2);
     // Additional 10% height reserved for turn/score display.
@@ -126,54 +133,54 @@ export default class RwbUiGame {
   }
 
   computeGameLayout() {
-    this.options.gridSizePx = this.computeBaseGridSize();
+    data.gridSizePx = this.computeBaseGridSize();
 
     // Analyze container AR vs board AR, and determine if the rest of UI should be portrait of landscape.
     const containerAR = this.engine.options.width / this.engine.options.height;
     // Additional 10% height reserved for turn/score display on board area.
     const boardAR = this.engine.options.gridCountX / this.engine.options.gridCountY / 1.1;
-    this.options.board.width = this.options.gridSizePx * this.engine.options.gridCountX;
-    this.options.board.height = this.options.gridSizePx * this.engine.options.gridCountY;
+    data.board.width = data.gridSizePx * this.engine.options.gridCountX;
+    data.board.height = data.gridSizePx * this.engine.options.gridCountY;
 
-    this.options.board.pt = Math.floor(
-      (1 + 0.1 * this.engine.options.gridCountY) * this.options.gridSizePx,
+    data.board.pt = Math.floor(
+      (1 + 0.1 * this.engine.options.gridCountY) * data.gridSizePx,
     );
     if (containerAR > boardAR) {
-      this.options.displayMode = 'landscape';
-      this.options.mx = Math.max(0, (this.engine.options.width - 1.4 * this.engine.options.height) / 2);
-      this.options.my = 0;
-      this.options.board.px = this.options.gridSizePx;
-      this.options.board.widthWP = this.options.board.width
-        + 2 * this.options.board.px;
-      this.options.board.heightWP = this.engine.options.height;
-      this.options.controls.x = this.options.mx + this.options.board.widthWP;
-      this.options.controls.y = this.options.my;
-      this.options.controls.width = this.engine.options.width
-        - this.options.controls.x - this.options.mx;
-      this.options.controls.height = this.options.board.heightWP;
+      data.displayMode = 'landscape';
+      data.mx = Math.max(0, (this.engine.options.width - 1.4 * this.engine.options.height) / 2);
+      data.my = 0;
+      data.board.px = data.gridSizePx;
+      data.board.widthWP = data.board.width
+        + 2 * data.board.px;
+      data.board.heightWP = this.engine.options.height;
+      data.controls.x = data.mx + data.board.widthWP;
+      data.controls.y = data.my;
+      data.controls.width = this.engine.options.width
+        - data.controls.x - data.mx;
+      data.controls.height = data.board.heightWP;
     } else {
-      this.options.displayMode = 'portrait';
-      this.options.mx = 0;
-      this.options.my = Math.max(0, (this.engine.options.height - 1.4 * this.engine.options.width) / 2);
-      this.options.board.px = Math.floor(
-        (this.engine.options.width - this.options.board.width) / 2,
+      data.displayMode = 'portrait';
+      data.mx = 0;
+      data.my = Math.max(0, (this.engine.options.height - 1.4 * this.engine.options.width) / 2);
+      data.board.px = Math.floor(
+        (this.engine.options.width - data.board.width) / 2,
       );
-      this.options.board.widthWP = this.engine.options.width;
-      this.options.board.heightWP = this.options.board.height
-        + this.options.board.pt + this.options.gridSizePx;
-      this.options.controls.x = this.options.mx;
-      this.options.controls.y = this.options.my + this.options.board.heightWP;
-      this.options.controls.width = this.options.board.widthWP;
-      this.options.controls.height = this.engine.options.height
-        - this.options.controls.y - this.options.my;
+      data.board.widthWP = this.engine.options.width;
+      data.board.heightWP = data.board.height
+        + data.board.pt + data.gridSizePx;
+      data.controls.x = data.mx;
+      data.controls.y = data.my + data.board.heightWP;
+      data.controls.width = data.board.widthWP;
+      data.controls.height = this.engine.options.height
+        - data.controls.y - data.my;
     }
 
-    this.options.controls.du = 1 / 100 * Math.min(
-      this.options.controls.width, this.options.controls.height,
+    data.controls.du = 1 / 100 * Math.min(
+      data.controls.width, data.controls.height,
     );
 
-    this.options.infoTextSize = Math.floor(
-      0.035 * this.engine.options.gridCountY * this.options.gridSizePx,
+    data.infoTextSize = Math.floor(
+      0.035 * this.engine.options.gridCountY * data.gridSizePx,
     );
   }
 
@@ -236,6 +243,35 @@ export default class RwbUiGame {
       tilesCrossed, // Note: with oob some tile indices may not actually exist.
       target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
     };
+  }
+
+  confirmAiMove() {
+    const aiMove = this.store.get('aiMove');
+
+    let dice1 = 0;
+    let dice2 = 1;
+    if (this.store.get('diceValue[0]') !== aiMove.values[0]) {
+      dice1 = 1;
+      dice2 = 0;
+    }
+    // First move.
+    this.planMove({
+      dice: dice1,
+      direction: aiMove.dirs[0]
+    });
+
+    // Second move.
+    window.setTimeout(() => {
+      this.planMove({
+        dice: dice2,
+        direction: aiMove.dirs[1]
+      });
+
+      // Confirm move.
+      window.setTimeout(() => {
+        this.confirmMove();
+      }, 1000);
+    }, 1000);
   }
 
   confirmMove() {
@@ -310,18 +346,10 @@ export default class RwbUiGame {
   drawMovementPreview(moveIndex) {
     const moveData = data.movement.moves[moveIndex];
     const color = (moveData.alive ? 0x00ff00 : 0xff0000);
-    const marginX = Math.floor(this.options.mx + this.options.board.px);
-    const marginY = Math.floor(this.options.my + this.options.board.pt);
     const [i0, j0] = moveData.tilesCrossed[0];
     moveData.tilesCrossed.forEach(([i, j]) => {
-      const tile = new PIXI.Graphics();
-      const offsetX = marginX + i * this.options.gridSizePx;
-      const offsetY = marginY + j * this.options.gridSizePx;
-      tile.beginFill((i === i0 && j === j0) ? 0xffff00 : color);
-      tile.drawRect(0, 0, this.options.gridSizePx, this.options.gridSizePx);
-      tile.endFill();
-      tile.alpha = 0.5;
-      tile.position.set(offsetX, offsetY);
+      const tileColor = (i === i0 && j === j0) ? 0xffff00 : color;
+      const tile = RwbUiGame.drawTintedTile(i, j, tileColor);
       this.engine.ui.objects.movementPreviews[moveIndex].push(tile);
       this.engine.ui.containers.map.addChild(tile);
     });
@@ -344,6 +372,41 @@ export default class RwbUiGame {
     if (data.movement.moves[1].direction !== null) {
       this.drawMovementPreview(1);
     }
+  }
+
+  drawProbabilities() {
+    const probDistribution = this.store.get('probDistribution');
+    probDistribution.forEach((column, x) => {
+      column.forEach((prob, y) => {
+        // R: 255 @ prob 0, 64 @ prob 0.8, 64 @ prob 1
+        // G: 64 @ prob 0, 64 @ prob 0.2, 255 @ prob 1
+        // B: 64 @ prob 0, 64 @ prob 0.2, 0 @ prob 0.5, 64 @ prob 0.8, 64 @ prob 1
+        const r = Math.floor(Math.min(255, Math.max(64, -240 * prob + 255)));
+        const g = Math.floor(Math.min(255, Math.max(64, 240 * prob + 15)));
+        const b = Math.floor(Math.min(64, Math.max(0, -210 * (0.3 - Math.abs(prob - 0.5)) + 64)));
+
+        const fill = r * 65536 + g * 256 + b;
+        const tile = RwbUiGame.drawTintedTile(x, y, fill);
+        tile.alpha = 1;
+        this.engine.ui.objects.probabilityHints.push(tile);
+        this.engine.ui.containers.map.addChild(tile);
+      });
+    });
+    data.displayingProbabilityHints = true;
+  }
+
+  static drawTintedTile(x, y, fill) {
+    const tile = new PIXI.Graphics();
+    const marginX = data.mx + data.board.px;
+    const marginY = data.my + data.board.pt;
+    const offsetX = marginX + x * data.gridSizePx;
+    const offsetY = marginY + y * data.gridSizePx;
+    tile.beginFill(fill);
+    tile.drawRect(0, 0, data.gridSizePx, data.gridSizePx);
+    tile.endFill();
+    tile.alpha = 0.5;
+    tile.position.set(offsetX, offsetY);
+    return tile;
   }
 
   enableDiceButtons(diceIndex) {
@@ -540,12 +603,18 @@ export default class RwbUiGame {
   }
 
   initUiMessages() {
-    this.engine.createUiMessage('mapDifficulty');
-    const msg = this.engine.createUiMessage('mapSeed');
-    msg.interactive = true;
-    msg.on('click', () => {
+    const msgDifficulty = this.engine.createUiMessage('mapDifficulty');
+    msgDifficulty.interactive = true;
+    msgDifficulty.on('click', () => {
+      this.engine.dispatchEvent(new CustomEvent('toggleProb', {}));
+    });
+
+    const msgSeed = this.engine.createUiMessage('mapSeed');
+    msgSeed.interactive = true;
+    msgSeed.on('click', () => {
       this.engine.dispatchEvent(new CustomEvent('seedNewGame', {}));
     });
+
     this.engine.createUiMessage('gameTurn', { align: 'center' });
     this.engine.createUiMessage('playerTurn', { align: 'center' });
     this.engine.createUiMessage('gameScore', { align: 'right' });
@@ -553,7 +622,7 @@ export default class RwbUiGame {
     this.engine.createUiMessage('gameOver', {
       align: 'center',
       fill: 0x0000ff,
-      fontSize: 2 * this.options.gridSizePx,
+      fontSize: 2 * data.gridSizePx,
     });
   }
 
@@ -604,9 +673,9 @@ export default class RwbUiGame {
 
     // Otherwise we move towards the next position
     const playerPiece = this.engine.ui.objects.playerPieces[currentActivePlayer];
-    const newX = playerPiece.x + this.options.gridSizePx
+    const newX = playerPiece.x + data.gridSizePx
       * (data.movement.animation.nextTiles[0][0] - data.movement.animation.currentTile[0]);
-    const newY = playerPiece.y + this.options.gridSizePx
+    const newY = playerPiece.y + data.gridSizePx
       * (data.movement.animation.nextTiles[0][1] - data.movement.animation.currentTile[1]);
 
     // Move player towards the further next tile.
@@ -614,7 +683,6 @@ export default class RwbUiGame {
       steps: 12,
       translate: { x: newX, y: newY },
       cb: () => {
-        console.log(`step done, next: ${newY}`);
         this.moveRobotStep();
       },
     });
@@ -627,27 +695,28 @@ export default class RwbUiGame {
     this.engine.updateUiMessage('gameTurn', { text: `Turn: ${currentTurn}` });
     this.engine.updateUiMessage('gameScore', { text: `Score: ${this.store.get('currentScore')}` });
 
-    const playerName = this.store.get(`players.${currentActivePlayer}.name`);
+    const playerName = this.store.get(`players[${currentActivePlayer}].name`);
     this.engine.updateUiMessage('playerTurn', {
       text: `${playerName}'s turn.`,
       fill: this.store.get('gameOptions.playerColors')[currentActivePlayer],
-      fontSize: 1.2 * this.options.gridSizePx,
-      x: this.options.mx + this.options.board.widthWP / 2,
-      y: this.options.my + this.options.board.heightWP / 2,
+      fontSize: 1.2 * data.gridSizePx,
+      x: data.mx + data.board.widthWP / 2,
+      y: data.my + data.board.heightWP / 2,
     });
     this.engine.addTransition('messages.playerTurn', {
-      translate: { y: this.options.my + 4 * this.options.infoTextSize },
+      translate: { y: data.my + 4 * data.infoTextSize },
       cb: () => {
         this.engine.updateUiMessage('playerTurn', {
-          x: this.options.mx + this.options.board.widthWP / 2,
-          y: this.options.my + 2.5 * this.options.infoTextSize,
-          fontSize: this.options.infoTextSize,
+          x: data.mx + data.board.widthWP / 2,
+          y: data.my + 2.5 * data.infoTextSize,
+          fontSize: data.infoTextSize,
         });
       },
     });
 
     this.repositionPlayerPieces();
     this.clearMovement();
+    this.clearProbabilityHints();
     data.canMove = false;
     this.engine.ui.objects.controls.btnCancel.alpha = 0.3;
     this.engine.ui.objects.controls.btnConfirm.alpha = 0.3;
@@ -659,7 +728,16 @@ export default class RwbUiGame {
           const diceValue = this.store.get(`diceValue[${i}]`);
           this.engine.ui.objects.diceFaces[i].texture = this.engine.textures[`dice-face-${diceValue}`];
 
-          this.enableDiceButtons(i);
+          switch (this.store.get(`players[${currentActivePlayer}].controller`)) {
+            case 2:
+            case 3:
+              // Easy & Hard AI
+              this.confirmAiMoveDebounced();
+              break;
+            default:
+              // Human
+              this.enableDiceButtons(i);
+          }
         },
       });
     });
@@ -695,6 +773,7 @@ export default class RwbUiGame {
       this.clearMovement(1);
     }
 
+    this.clearProbabilityHints();
     this.computePlannedMovementData(moveIndex, params);
     this.drawMovementPreviews();
 
@@ -716,10 +795,10 @@ export default class RwbUiGame {
     this.computeGameLayout();
 
     // Resize game board.
-    this.engine.ui.objects.map.board.x = this.options.mx;
-    this.engine.ui.objects.map.board.y = this.options.my;
-    this.engine.ui.objects.map.board.width = this.options.board.widthWP;
-    this.engine.ui.objects.map.board.height = this.options.board.heightWP;
+    this.engine.ui.objects.map.board.x = data.mx;
+    this.engine.ui.objects.map.board.y = data.my;
+    this.engine.ui.objects.map.board.width = data.board.widthWP;
+    this.engine.ui.objects.map.board.height = data.board.heightWP;
 
     // In-game.
     if (this.store.get('gameStatus') > 0) {
@@ -735,8 +814,11 @@ export default class RwbUiGame {
       // Reposition controls.
       this.repositionGameControls();
 
-      // Re-draw
+      // Re-draw movement previews.
       this.drawMovementPreviews();
+
+      // Disable hints if visible.
+      this.clearProbabilityHints();
     }
   }
 
@@ -755,66 +837,66 @@ export default class RwbUiGame {
 
     // Update controls area.
     this.engine.ui.objects.map.controlsArea.position.set(
-      this.options.controls.x,
-      this.options.controls.y,
+      data.controls.x,
+      data.controls.y,
     );
-    this.engine.ui.objects.map.controlsArea.width = this.options.controls.width;
-    this.engine.ui.objects.map.controlsArea.height = this.options.controls.height;
+    this.engine.ui.objects.map.controlsArea.width = data.controls.width;
+    this.engine.ui.objects.map.controlsArea.height = data.controls.height;
 
     // Pause button.
-    this.engine.ui.objects.controls.btnPause.width = 15 * this.options.controls.du;
-    this.engine.ui.objects.controls.btnPause.height = 15 * this.options.controls.du;
+    this.engine.ui.objects.controls.btnPause.width = 15 * data.controls.du;
+    this.engine.ui.objects.controls.btnPause.height = 15 * data.controls.du;
     this.engine.ui.objects.controls.btnPause.position.set(
-      this.options.controls.x + this.options.controls.width - 10 * this.options.controls.du,
-      this.options.controls.y + 10 * this.options.controls.du,
+      data.controls.x + data.controls.width - 10 * data.controls.du,
+      data.controls.y + 10 * data.controls.du,
     );
 
     const btnTexts = ['Cancel', 'Confirm'];
     [0, 1].forEach((i) => {
       const btn = this.engine.ui.objects.controls[`btn${btnTexts[i]}`];
-      btn.width = 25 * this.options.controls.du;
-      btn.height = 25 * this.options.controls.du;
-      if (this.options.displayMode === 'landscape') {
+      btn.width = 25 * data.controls.du;
+      btn.height = 25 * data.controls.du;
+      if (data.displayMode === 'landscape') {
         // Landscape.
         btn.position.set(
-          this.options.mx
-          + this.options.board.widthWP
-          + (30 + i * 40) * this.options.controls.du,
-          0.85 * this.options.controls.height,
+          data.mx
+          + data.board.widthWP
+          + (30 + i * 40) * data.controls.du,
+          0.85 * data.controls.height,
         );
       } else {
         // Portrait.
         btn.position.set(
-          0.85 * this.options.controls.width,
-          this.options.my
-          + this.options.board.heightWP
-          + (30 + i * 40) * this.options.controls.du,
+          0.85 * data.controls.width,
+          data.my
+          + data.board.heightWP
+          + (30 + i * 40) * data.controls.du,
         );
       }
     });
 
     // Dice faces.
-    const baselineX = this.options.mx
-      + this.options.board.widthWP + 50 * this.options.controls.du;
-    const baselineY = this.options.my
-      + this.options.board.heightWP + 50 * this.options.controls.du;
+    const baselineX = data.mx
+      + data.board.widthWP + 50 * data.controls.du;
+    const baselineY = data.my
+      + data.board.heightWP + 50 * data.controls.du;
     const diceFacePos = [
       [baselineX, baselineY],
       [baselineX, baselineY],
     ];
-    if (this.options.displayMode === 'landscape') {
+    if (data.displayMode === 'landscape') {
       // Landscape.
-      diceFacePos[0][1] = 0.2 * this.options.controls.height;
-      diceFacePos[1][1] = 0.55 * this.options.controls.height;
+      diceFacePos[0][1] = 0.2 * data.controls.height;
+      diceFacePos[1][1] = 0.55 * data.controls.height;
     } else {
       // Portrait.
-      diceFacePos[0][0] = 0.2 * this.options.controls.width;
-      diceFacePos[1][0] = 0.55 * this.options.controls.width;
+      diceFacePos[0][0] = 0.2 * data.controls.width;
+      diceFacePos[1][0] = 0.55 * data.controls.width;
     }
     // Two dice, init at 0.
     [0, 1].forEach((i) => {
-      this.engine.ui.objects.diceFaces[i].width = 25 * this.options.controls.du;
-      this.engine.ui.objects.diceFaces[i].height = 25 * this.options.controls.du;
+      this.engine.ui.objects.diceFaces[i].width = 25 * data.controls.du;
+      this.engine.ui.objects.diceFaces[i].height = 25 * data.controls.du;
       this.engine.ui.objects.diceFaces[i].position.set(diceFacePos[i][0], diceFacePos[i][1]);
 
       // Dice controls.
@@ -825,11 +907,11 @@ export default class RwbUiGame {
         ['Right', 1, 0],
       ].forEach(([dir, x, y]) => {
         const btn = this.engine.ui.objects[`btnDice${i}${dir}`];
-        btn.width = 12 * this.options.controls.du;
-        btn.height = 12 * this.options.controls.du;
+        btn.width = 12 * data.controls.du;
+        btn.height = 12 * data.controls.du;
         btn.position.set(
-          diceFacePos[i][0] + 25 * x * this.options.controls.du,
-          diceFacePos[i][1] + 25 * y * this.options.controls.du,
+          diceFacePos[i][0] + 25 * x * data.controls.du,
+          diceFacePos[i][1] + 25 * y * data.controls.du,
         );
       });
     });
@@ -837,59 +919,53 @@ export default class RwbUiGame {
 
   repositionGameMessages() {
     // Update game status messages at top.
-    const left = this.options.mx + this.options.infoTextSize;
-    const center = this.options.mx + this.options.board.widthWP / 2;
-    const right = this.options.mx + this.options.board.widthWP - this.options.infoTextSize;
-    const row1 = this.options.my + this.options.infoTextSize;
-    const row2 = this.options.my + 2.5 * this.options.infoTextSize;
-    const middle = this.options.my + this.options.board.heightWP / 2;
-    this.engine.updateUiMessage('mapDifficulty', { x: left, y: row1, fontSize: this.options.infoTextSize });
-    this.engine.updateUiMessage('mapSeed', { x: left, y: row2, fontSize: this.options.infoTextSize });
-    this.engine.updateUiMessage('gameTurn', { x: center, y: row1, fontSize: this.options.infoTextSize });
-    this.engine.updateUiMessage('playerTurn', { x: center, y: row2, fontSize: this.options.infoTextSize });
-    this.engine.updateUiMessage('gameScore', { x: right, y: row1, fontSize: this.options.infoTextSize });
-    this.engine.updateUiMessage('hiScore', { x: right, y: row2, fontSize: this.options.infoTextSize });
-    this.engine.updateUiMessage('gameOver', { x: center, y: middle, fontSize: 2 * this.options.gridSizePx });
+    const left = data.mx + data.infoTextSize;
+    const center = data.mx + data.board.widthWP / 2;
+    const right = data.mx + data.board.widthWP - data.infoTextSize;
+    const row1 = data.my + data.infoTextSize;
+    const row2 = data.my + 2.5 * data.infoTextSize;
+    const middle = data.my + data.board.heightWP / 2;
+    this.engine.updateUiMessage('mapDifficulty', { x: left, y: row1, fontSize: data.infoTextSize });
+    this.engine.updateUiMessage('mapSeed', { x: left, y: row2, fontSize: data.infoTextSize });
+    this.engine.updateUiMessage('gameTurn', { x: center, y: row1, fontSize: data.infoTextSize });
+    this.engine.updateUiMessage('playerTurn', { x: center, y: row2, fontSize: data.infoTextSize });
+    this.engine.updateUiMessage('gameScore', { x: right, y: row1, fontSize: data.infoTextSize });
+    this.engine.updateUiMessage('hiScore', { x: right, y: row2, fontSize: data.infoTextSize });
+    this.engine.updateUiMessage('gameOver', { x: center, y: middle, fontSize: 2 * data.gridSizePx });
   }
 
   repositionMapTiles() {
-    const marginX = Math.floor(this.options.mx + this.options.board.px
-      + 0.5 * this.options.gridSizePx);
-    const marginY = Math.floor(this.options.my + this.options.board.pt
-      + 0.5 * this.options.gridSizePx);
+    const marginX = data.mx + data.board.px + 0.5 * data.gridSizePx;
+    const marginY = data.my + data.board.pt + 0.5 * data.gridSizePx;
 
     // Note PIXI sprites are anchored at center middle.
     const iMax = Math.min(this.engine.options.gridCountX, this.engine.ui.objects.tiles.length);
     for (let i = 0; i < iMax; i++) {
       const jMax = Math.min(this.engine.options.gridCountY, this.engine.ui.objects.tiles[i].length);
       for (let j = 0; j < jMax; j++) {
-        const offsetX = marginX + i * this.options.gridSizePx;
-        const offsetY = marginY + j * this.options.gridSizePx;
-        this.engine.ui.objects.tiles[i][j].width = this.options.gridSizePx;
-        this.engine.ui.objects.tiles[i][j].height = this.options.gridSizePx;
+        const offsetX = marginX + i * data.gridSizePx;
+        const offsetY = marginY + j * data.gridSizePx;
+        this.engine.ui.objects.tiles[i][j].width = data.gridSizePx;
+        this.engine.ui.objects.tiles[i][j].height = data.gridSizePx;
         this.engine.ui.objects.tiles[i][j].position.set(offsetX, offsetY);
       }
     }
   }
 
   repositionPlayerPiece(playerIndex, halfSize = false, tileOverwrite = null) {
-    const marginX = Math.floor(
-      this.options.mx + this.options.board.px + 0.5 * this.options.gridSizePx,
-    );
-    const marginY = Math.floor(
-      this.options.my + this.options.board.pt + 0.5 * this.options.gridSizePx,
-    );
-    const halfGridSizePx = this.options.gridSizePx / 2;
+    const marginX = data.mx + data.board.px + 0.5 * data.gridSizePx;
+    const marginY = data.my + data.board.pt + 0.5 * data.gridSizePx;
+    const halfGridSizePx = data.gridSizePx / 2;
 
     const piece = this.engine.ui.objects.playerPieces[playerIndex];
     let xy = {};
     if (tileOverwrite !== null) {
       [xy.x, xy.y] = tileOverwrite;
     } else {
-      xy = (this.store.get(`players.${playerIndex}`));
+      xy = (this.store.get(`players[${playerIndex}]`));
     }
-    const offsetX = marginX + xy.x * this.options.gridSizePx;
-    const offsetY = marginY + xy.y * this.options.gridSizePx;
+    const offsetX = marginX + xy.x * data.gridSizePx;
+    const offsetY = marginY + xy.y * data.gridSizePx;
 
     if (halfSize) {
       piece.width = halfGridSizePx;
@@ -897,8 +973,8 @@ export default class RwbUiGame {
       piece.x = offsetX + (playerIndex % 2 === 0 ? -halfGridSizePx : halfGridSizePx) / 2;
       piece.y = offsetY + (playerIndex > 1 ? -halfGridSizePx : halfGridSizePx) / 2;
     } else {
-      piece.width = this.options.gridSizePx;
-      piece.height = this.options.gridSizePx;
+      piece.width = data.gridSizePx;
+      piece.height = data.gridSizePx;
       piece.x = offsetX;
       piece.y = offsetY;
     }
@@ -913,8 +989,8 @@ export default class RwbUiGame {
   }
 
   showGameOverMessage(params) {
-    const center = this.options.mx + this.options.board.widthWP / 2;
-    const middle = this.options.my + this.options.board.heightWP / 2;
+    const center = data.mx + data.board.widthWP / 2;
+    const middle = data.my + data.board.heightWP / 2;
     this.engine.updateUiMessage('gameOver', {
       ...params,
       alpha: 0.9,
@@ -937,5 +1013,14 @@ export default class RwbUiGame {
     this.createGameTiles(this.store.get('mapTiles'));
     this.createPlayerPieces(this.store.get('playersCount'));
     data.canMove = false;
+  }
+
+  toggleProbDisplay() {
+    if (data.displayingProbabilityHints) {
+      this.clearProbabilityHints();
+    } else {
+      this.clearProbabilityHints();
+      this.drawProbabilities();
+    }
   }
 }

@@ -1,6 +1,7 @@
-import RandomSeeder from './random-seeder.js';
-import RwbUiEngine from './rwb-ui-engine.js';
-import RwbState from './rwb-state.js';
+import RandomSeeder from './random-seeder';
+import RwbUiEngine from './rwb-ui-engine';
+import RwbState from './rwb-state';
+import RwbAi from './rwb-ai';
 
 export default class RwbApp {
   constructor(holderDivId, gameOptions = {}) {
@@ -14,9 +15,9 @@ export default class RwbApp {
       gridCountY: null,
       maxScore: 100,
       muted: false,
-      controllersAllowed: [0, 1],
+      controllersAllowed: [0, 1, 2, 3],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
-      waterTileChances: [0.05, 0.15, 0.22, 0.35], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
+      waterTileChances: [0.05, 0.15, 0.22, 0.30], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
     };
     Object.assign(this.gameOptions, gameOptions);
@@ -52,6 +53,7 @@ export default class RwbApp {
       gridCountY: this.gameOptions.gridCountY,
       muted: this.gameOptions.muted,
     });
+    this.ai = new RwbAi(this.store);
   }
 
   init() {
@@ -82,6 +84,10 @@ export default class RwbApp {
         this.updateCurrentPlayerData(e.detail);
         this.nextTurn();
       });
+      this.uiEngine.addEventListener('toggleProb', () => {
+        this.computeMapSolution();
+        this.uiEngine.modules.game.toggleProbDisplay();
+      });
 
       // Trigger it manually for initial rendering.
       this.uiEngine.refreshDisplay();
@@ -93,6 +99,15 @@ export default class RwbApp {
     for (let i = 0, playersCount = this.store.get('playersCount'); i < playersCount; i++) {
       this.store.set(`players[${i}].alive`, true);
       this.store.set(`players[${i}].playable`, true);
+    }
+  }
+
+  computeMapSolution() {
+    const mapSeed = this.store.get('mapSeed');
+    if (this.store.get('probUpdated') !== mapSeed) {
+      const probDistribution = this.ai.getMapProbabilities(10);
+      this.store.set('probDistribution', probDistribution);
+      this.store.set('probUpdated', mapSeed);
     }
   }
 
@@ -117,7 +132,16 @@ export default class RwbApp {
       }
     }
 
+    // Special: on impossible difficulty, end location will be semi-boxed in by water.
+    if (this.store.get('mapDifficulty') === 3) {
+      [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]].forEach(([i, j]) => {
+        this.store.set(`mapTiles.${this.gameOptions.endLocation.x + i}.${this.gameOptions.endLocation.y + j}.type`,
+          'water');
+      });
+    }
+
     // Hard-code start and end locations as non-water.
+    this.store.set('endLocation', this.gameOptions.endLocation);
     this.store.set(`mapTiles.${this.gameOptions.startLocation.x}.${this.gameOptions.startLocation.y}.type`,
       'start');
     this.store.set(`mapTiles.${this.gameOptions.endLocation.x}.${this.gameOptions.endLocation.y}.type`, 'end');
@@ -199,6 +223,22 @@ export default class RwbApp {
       this.store.set(`diceValue[${i}]`, Math.floor(Math.random() * 6) + 1);
     });
 
+    // Compute AI moves if player is controlled by AI.
+    const currentController = this.store.get(`players[${nextActivePlayer}].controller`);
+    if (currentController === 2 || currentController === 3) {
+      this.computeMapSolution();
+      const { x, y } = this.store.get(`players[${nextActivePlayer}]`);
+      let aiMove;
+      if (currentController === 2) {
+        // 25% chance to pick a random surviving move.
+        aiMove = this.ai.pickMove([x, y], this.store.get('diceValue[0]'), this.store.get('diceValue[1]'), 0.25);
+      } else {
+        // Always pick the best known move available.
+        aiMove = this.ai.pickMove([x, y], this.store.get('diceValue[0]'), this.store.get('diceValue[1]'), 0);
+      }
+      this.store.set('aiMove', aiMove);
+    }
+
     this.uiEngine.modules.game.nextTurn();
   }
 
@@ -234,7 +274,7 @@ export default class RwbApp {
   }
 
   updateWinner(currentActivePlayer) {
-    const playerName = this.store.get(`players.${currentActivePlayer}.name`);
+    const playerName = this.store.get(`players[${currentActivePlayer}].name`);
 
     // Save high score.
     this.store.set(`players[${currentActivePlayer}].playable`, false);

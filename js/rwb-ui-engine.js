@@ -73,6 +73,7 @@ export default class RwbUiEngine {
           hiScore: null,
         },
         movementPreviews: [],
+        probabilityHints: [],
         controllerFaces: [],
         diceFaces: [],
         playerPieces: [],

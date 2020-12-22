@@ -2,6 +2,9 @@ import * as PIXI from 'pixi.js';
 
 // Local view data.
 const data = {
+  width: null,
+  height: null,
+  maxPlayersCount: 4, // Hardcoded.
   playerController: [1, 0, 0, 0],
 };
 
@@ -10,26 +13,20 @@ export default class RwbUiMenu {
     this.engine = engine;
     this.store = store;
 
-    this.options = {
-      width: null,
-      height: null,
-      maxPlayersCount: 4, // Hardcoded.
-    };
-
     data.mapDifficulty = this.store.get('mapDifficulty');
   }
 
   computeMenuLayout() {
-    this.options.width = this.engine.options.width;
-    this.options.height = this.engine.options.height;
-    if (this.options.height > this.options.width) {
-      this.options.my = (this.options.height - this.options.width) / 2;
+    data.width = this.engine.options.width;
+    data.height = this.engine.options.height;
+    if (data.height > data.width) {
+      data.my = (data.height - data.width) / 2;
     } else {
-      this.options.my = 0;
+      data.my = 0;
     }
 
-    this.options.menuFontSize = 4 * this.engine.options.du;
-    this.options.titleFontSize = 8 * this.engine.options.du;
+    data.menuFontSize = 4 * this.engine.options.du;
+    data.titleFontSize = 8 * this.engine.options.du;
   }
 
   init() {
@@ -46,7 +43,7 @@ export default class RwbUiMenu {
     this.engine.createUiMessage('menuDifficulty', { container: 'menuMain', fill: 0xffffff, align: 'center' });
 
     // Controller faces.
-    for (let i = 0; i < this.options.maxPlayersCount; i++) {
+    for (let i = 0; i < data.maxPlayersCount; i++) {
       const texture = `face-${data.playerController[i]}`;
       const btn = new PIXI.Sprite(this.engine.textures[texture]);
       this.engine.ui.objects.controllerFaces.push(btn);
@@ -96,74 +93,73 @@ export default class RwbUiMenu {
   }
 
   repositionMenu() {
-    const { my } = this.options;
-    this.engine.ui.objects.base.menuBase.width = this.options.width;
-    this.engine.ui.objects.base.menuBase.height = this.options.height;
-    this.engine.ui.objects.base.menuOptionsArea.width = this.options.width;
-    this.engine.ui.objects.base.menuOptionsArea.height = 8.125 * this.options.titleFontSize;
-    this.engine.ui.objects.base.menuOptionsArea.y = my + 2.25 * this.options.titleFontSize;
+    this.engine.ui.objects.base.menuBase.width = data.width;
+    this.engine.ui.objects.base.menuBase.height = data.height;
+    this.engine.ui.objects.base.menuOptionsArea.width = data.width;
+    this.engine.ui.objects.base.menuOptionsArea.height = 8.125 * data.titleFontSize;
+    this.engine.ui.objects.base.menuOptionsArea.y = data.my + 2.25 * data.titleFontSize;
 
     this.engine.updateUiMessage('title', {
       text: 'Robot Wants Battery',
-      fontSize: this.options.titleFontSize,
-      x: this.options.width / 2,
-      y: my + this.options.titleFontSize,
+      fontSize: data.titleFontSize,
+      x: data.width / 2,
+      y: data.my + data.titleFontSize,
     });
 
     this.engine.updateUiMessage('menuDifficulty', {
       text: 'Map Difficulty',
-      fontSize: this.options.menuFontSize,
-      x: this.options.width / 2,
-      y: my + 3 * this.options.titleFontSize,
+      fontSize: data.menuFontSize,
+      x: data.width / 2,
+      y: data.my + 3 * data.titleFontSize,
     });
 
-    this.engine.ui.objects.menu.mapDifficulty.width = 1.5 * this.options.titleFontSize;
-    this.engine.ui.objects.menu.mapDifficulty.height = 1.5 * this.options.titleFontSize;
+    this.engine.ui.objects.menu.mapDifficulty.width = 1.5 * data.titleFontSize;
+    this.engine.ui.objects.menu.mapDifficulty.height = 1.5 * data.titleFontSize;
     this.engine.ui.objects.menu.mapDifficulty.position.set(
-      this.options.width / 2,
-      my + 4.5 * this.options.titleFontSize,
+      data.width / 2,
+      data.my + 4.5 * data.titleFontSize,
     );
 
     this.engine.updateUiMessage('menuPlayers', {
       text: 'Players',
-      fontSize: this.options.menuFontSize,
-      x: this.options.width / 2,
-      y: my + 7 * this.options.titleFontSize,
+      fontSize: data.menuFontSize,
+      x: data.width / 2,
+      y: data.my + 7 * data.titleFontSize,
     });
 
-    for (let i = 0; i < this.options.maxPlayersCount; i++) {
-      this.engine.ui.objects.controllerFaces[i].width = 1.5 * this.options.titleFontSize;
-      this.engine.ui.objects.controllerFaces[i].height = 1.5 * this.options.titleFontSize;
+    for (let i = 0; i < data.maxPlayersCount; i++) {
+      this.engine.ui.objects.controllerFaces[i].width = 1.5 * data.titleFontSize;
+      this.engine.ui.objects.controllerFaces[i].height = 1.5 * data.titleFontSize;
       this.engine.ui.objects.controllerFaces[i].position.set(
-        (i + 1) / 5 * this.options.width,
-        my + 8.5 * this.options.titleFontSize,
+        (i + 1) / 5 * data.width,
+        data.my + 8.5 * data.titleFontSize,
       );
     }
 
     // Difficulty and player buttons.
     for (let i = 0; i < 8; i++) {
-      this.engine.ui.objects.menu.controls[i].width = 0.5 * this.options.titleFontSize;
-      this.engine.ui.objects.menu.controls[i].height = 0.5 * this.options.titleFontSize;
+      this.engine.ui.objects.menu.controls[i].width = 0.5 * data.titleFontSize;
+      this.engine.ui.objects.menu.controls[i].height = 0.5 * data.titleFontSize;
       let x;
       let y;
-      const xAdjustment = (i % 2 === 0 ? -1 : 1) * 0.45 * this.options.titleFontSize;
+      const xAdjustment = (i % 2 === 0 ? -1 : 1) * 0.45 * data.titleFontSize;
       if (i < 2) {
         // Difficulty buttons.
-        x = this.options.width / 2 + xAdjustment;
-        y = my + 5.75 * this.options.titleFontSize;
+        x = data.width / 2 + xAdjustment;
+        y = data.my + 5.75 * data.titleFontSize;
       } else {
         // Player buttons.
-        x = Math.floor(i / 2 + 1) / 5 * this.options.width + xAdjustment;
-        y = my + 9.75 * this.options.titleFontSize;
+        x = Math.floor(i / 2 + 1) / 5 * data.width + xAdjustment;
+        y = data.my + 9.75 * data.titleFontSize;
       }
       this.engine.ui.objects.menu.controls[i].position.set(x, y);
     }
 
-    this.engine.ui.objects.menu.btnStartGame.width = 3.5 * this.options.titleFontSize;
-    this.engine.ui.objects.menu.btnStartGame.height = 3.5 * this.options.titleFontSize / 3.2;
+    this.engine.ui.objects.menu.btnStartGame.width = 3.5 * data.titleFontSize;
+    this.engine.ui.objects.menu.btnStartGame.height = 3.5 * data.titleFontSize / 3.2;
     this.engine.ui.objects.menu.btnStartGame.position.set(
-      this.options.width / 2,
-      my + 11.5 * this.options.titleFontSize,
+      data.width / 2,
+      data.my + 11.5 * data.titleFontSize,
     );
   }
 
@@ -201,15 +197,15 @@ export default class RwbUiMenu {
 
   updateMenuPlayerVisibility() {
     // Hide faces and arrows of all None players but the first.
-    let indexFirstNone = this.options.maxPlayersCount;
-    for (let i = 1; i < this.options.maxPlayersCount; i++) {
+    let indexFirstNone = data.maxPlayersCount;
+    for (let i = 1; i < data.maxPlayersCount; i++) {
       const controller = data.playerController[i];
       let visible = true;
       if (controller === 0) {
         if (i <= indexFirstNone) {
           indexFirstNone = i;
           // Also assign all future controllers to 0.
-          for (let j = i + 1; j < this.options.maxPlayersCount; j++) {
+          for (let j = i + 1; j < data.maxPlayersCount; j++) {
             data.playerController[j] = 0;
             this.engine.ui.objects.controllerFaces[j].texture = this.engine.textures['face-0'];
           }

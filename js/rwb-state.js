@@ -68,6 +68,7 @@ export default class RwbState {
       gameWon: false,
       mapSeed: '',
       mapTiles: [],
+      probUpdated: null,
     });
   }
 

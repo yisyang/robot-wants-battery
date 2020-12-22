@@ -1,4 +1,4 @@
-import RwbApp from './rwb-app.js';
+import RwbApp from './rwb-app';
 
 function createButton(text, width, height, margin = 0) {
   const button = document.createElement('button');
