@@ -17,7 +17,7 @@ export default class RwbApp {
       muted: false,
       controllersAllowed: [0, 1, 2, 3],
       difficultyLabels: ['Easy', 'Normal', 'Hard', 'Impossible'],
-      waterTileChances: [0.05, 0.15, 0.22, 0.33], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
+      waterTileChances: [0.05, 0.15, 0.22, 0.60], // Corresponds to difficulty 0/1/2/3 (easy/normal/hard/impossible)
       playerColors: [0x0028db, 0xff002a, 0x0dfd00, 0xe9b600], // Corresponds to colors used in player sprites.
     };
     Object.assign(this.gameOptions, gameOptions);
@@ -64,7 +64,7 @@ export default class RwbApp {
       this.uiEngine.addEventListener('seedNewGame', () => {
         /* eslint-disable-next-line no-alert */
         const seed = window.prompt('Enter map seed to start new game with seed.', '');
-        if (typeof(seed) === 'string' && seed !== '') {
+        if (typeof (seed) === 'string' && seed !== '') {
           this.newGame({ mapSeed: seed.substr(0, 8) });
         }
       });

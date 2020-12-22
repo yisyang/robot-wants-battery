@@ -237,8 +237,9 @@ export default class RwbUiGame {
     // Save local movement data.
     data.movement.moves[moveIndex] = {
       alive: !(oob || drowned),
-      diceIndex: oob ? -1 : params.dice, // Hack: storing invalid diceIndex allows illegal moves to be overwritten.
+      diceIndex: params.dice,
       direction: params.direction,
+      oob,
       flying,
       tilesCrossed, // Note: with oob some tile indices may not actually exist.
       target: oob ? [] : tilesCrossed[tilesCrossed.length - 1],
@@ -257,14 +258,14 @@ export default class RwbUiGame {
     // First move.
     this.planMove({
       dice: dice1,
-      direction: aiMove.dirs[0]
+      direction: aiMove.dirs[0],
     });
 
     // Second move.
     window.setTimeout(() => {
       this.planMove({
         dice: dice2,
-        direction: aiMove.dirs[1]
+        direction: aiMove.dirs[1],
       });
 
       // Confirm move.
