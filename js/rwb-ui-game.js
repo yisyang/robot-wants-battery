@@ -270,8 +270,8 @@ export default class RwbUiGame {
       // Confirm move.
       window.setTimeout(() => {
         this.confirmMove();
-      }, 1000);
-    }, 1000);
+      }, 500);
+    }, 500);
   }
 
   confirmMove() {
@@ -346,17 +346,21 @@ export default class RwbUiGame {
   drawMovementPreview(moveIndex) {
     const moveData = data.movement.moves[moveIndex];
     const color = (moveData.alive ? 0x00ff00 : 0xff0000);
-    const [i0, j0] = moveData.tilesCrossed[0];
-    moveData.tilesCrossed.forEach(([i, j]) => {
-      const tileColor = (i === i0 && j === j0) ? 0xffff00 : color;
-      const tile = RwbUiGame.drawTintedTile(i, j, tileColor);
-      this.engine.ui.objects.movementPreviews[moveIndex].push(tile);
-      this.engine.ui.containers.map.addChild(tile);
-    });
+    if (moveData.tilesCrossed.length) {
+      const [i0, j0] = moveData.tilesCrossed[0];
+      moveData.tilesCrossed.forEach(([i, j]) => {
+        const tileColor = (i === i0 && j === j0) ? 0xffff00 : color;
+        const tile = RwbUiGame.drawTintedTile(i, j, tileColor);
+        this.engine.ui.objects.movementPreviews[moveIndex].push(tile);
+        this.engine.ui.containers.map.addChild(tile);
+      });
+    }
 
-    this.engine.ui.objects.controls.btnCancel.alpha = 1;
-    if (moveIndex === 1) {
-      this.engine.ui.objects.controls.btnConfirm.alpha = 1;
+    if (data.canMove) {
+      this.engine.ui.objects.controls.btnCancel.alpha = 1;
+      if (moveIndex === 1) {
+        this.engine.ui.objects.controls.btnConfirm.alpha = 1;
+      }
     }
   }
 
@@ -757,14 +761,7 @@ export default class RwbUiGame {
     if (data.movement.moves[0].diceIndex === (1 - params.dice)) {
       // And player needs to be alive OR flying after the first move.
       if (data.movement.moves[0].alive || data.movement.moves[0].direction === params.direction) {
-        // And player must not have already tried the same direction and ended with death.
-        if (data.movement.moves[1].direction !== params.direction) {
-          // Trying a new direction.
-          moveIndex = 1;
-        } else if (data.movement.moves[1].alive) {
-          // Trying the same direction and still alive, no change needed.
-          return;
-        }
+        moveIndex = 1;
       }
     }
 

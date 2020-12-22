@@ -329,7 +329,7 @@ export default class RwbAi {
     const possibleMoves = RwbAi.getPossibleMoves(xy0, dice1, dice2);
     // No legal moves.
     if (possibleMoves.length === 0) {
-      // Just go towards the right... into water or out of bounds.
+      // Just go ahead and do the impossible... into water or out of bounds.
       return {
         dirs: ['Right', 'Right'],
         values: [dice1, dice2],
